@@ -21,6 +21,17 @@ import {
   todayJakartaISO,
 } from '../utils/format';
 
+function normalizePublicImageUrl(url: string | undefined, fallback: string): string {
+  if (!url) return fallback;
+  if (url.includes('practitioner_female_hijab_1794541305490.jpg')) {
+    return '/images/practitioner_tcm_female_1794541320309.jpg';
+  }
+  if (url.startsWith('/src/assets/images/')) {
+    return url.replace('/src/assets/images/', '/images/');
+  }
+  return url;
+}
+
 interface PublicWebsiteProps {
   bootstrap: BootstrapPayload;
   onGoPortal: () => void;
@@ -329,7 +340,7 @@ export const PublicWebsite: React.FC<PublicWebsiteProps> = ({
           <div className="lg:col-span-6">
             <div className="h-full min-h-[300px] overflow-hidden rounded-lg border border-[#E4DDD0] bg-[#EAE0D0]">
               <img
-                src="/src/assets/images/hero_clinic_sanctuary_1794541318828.jpg"
+                src="/images/hero_clinic_sanctuary_1794541318828.jpg"
                 alt="Ruang konsultasi Klinik Holistik ThibbunCare bernuansa kayu dan hijau zaitun"
                 referrerPolicy="no-referrer"
                 className="h-full w-full object-cover"
@@ -464,7 +475,10 @@ export const PublicWebsite: React.FC<PublicWebsiteProps> = ({
               >
                 <div className="aspect-square w-full overflow-hidden bg-[#EAE0D0]">
                   <img
-                    src={prac.photoUrl}
+                    src={normalizePublicImageUrl(
+                      prac.photoUrl,
+                      '/images/practitioner_tcm_female_1794541320309.jpg'
+                    )}
                     alt={prac.name}
                     referrerPolicy="no-referrer"
                     className="h-full w-full object-cover"
@@ -809,7 +823,10 @@ export const PublicWebsite: React.FC<PublicWebsiteProps> = ({
                   <div>
                     <div className="aspect-[4/3] w-full overflow-hidden bg-[#EAE0D0]">
                       <img
-                        src={art.imageUrl || '/src/assets/images/service_herbal_apothecary_1794541318909.jpg'}
+                        src={normalizePublicImageUrl(
+                          art.imageUrl,
+                          '/images/service_herbal_apothecary_1794541318909.jpg'
+                        )}
                         alt={art.title}
                         referrerPolicy="no-referrer"
                         className="h-full w-full object-cover"

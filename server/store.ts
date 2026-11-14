@@ -223,7 +223,7 @@ export function createSeedDatabase(): ClinicDatabase {
       title: 'Praktisi TCM & Akupunktur',
       specialty: 'Observasi TCM, Akupunktur, Herbal & Moksibusi',
       bio: 'Berpengalaman 9 tahun dalam terapi tradisional Tiongkok terintegrasi dan pendampingan kesehatan keluarga.',
-      photoUrl: '/src/assets/images/practitioner_tcm_female_1794541320309.jpg',
+      photoUrl: '/images/practitioner_tcm_female_1794541320309.jpg',
       branchIds: ['br-jkt', 'br-bdg'],
       serviceIds: ['srv-tcm', 'srv-akupunktur', 'srv-moksa', 'srv-herbal', 'srv-akupresur'],
       schedules: [
@@ -237,7 +237,7 @@ export function createSeedDatabase(): ClinicDatabase {
       title: 'Terapis Bekam Steril & Pendamping Spiritual',
       specialty: 'Bekam Basah Steril, Akupresur & Ruqyah Syar’iyyah',
       bio: 'Menekankan prosedur sterilitas sekali pakai, komunikasi persetujuan tindakan yang jelas, dan pendampingan spiritual yang menenangkan.',
-      photoUrl: '/src/assets/images/practitioner_bekam_male_1794541319637.jpg',
+      photoUrl: '/images/practitioner_bekam_male_1794541319637.jpg',
       branchIds: ['br-jkt'],
       serviceIds: ['srv-bekam', 'srv-akupresur', 'srv-ruqyah', 'srv-tcm'],
       schedules: allDaysSchedules('br-jkt'),
@@ -248,7 +248,7 @@ export function createSeedDatabase(): ClinicDatabase {
       title: 'Praktisi Akupresur & Herbal Cabang Bandung',
       specialty: 'Akupunktur, Akupresur & Konsultasi Herbal',
       bio: 'Fokus pada pemulihan kebugaran otot, keluhan pencernaan fungsional, dan edukasi gaya hidup harian.',
-      photoUrl: '/src/assets/images/practitioner_bekam_male_1794541319637.jpg',
+      photoUrl: '/images/practitioner_bekam_male_1794541319637.jpg',
       branchIds: ['br-bdg'],
       serviceIds: ['srv-tcm', 'srv-bekam', 'srv-akupunktur', 'srv-akupresur', 'srv-herbal'],
       schedules: allDaysSchedules('br-bdg'),
@@ -983,7 +983,7 @@ export function createSeedDatabase(): ClinicDatabase {
       publishedDate: yesterday,
       excerpt:
         'Bagaimana praktisi tradisional membaca warna, selaput lidah, serta ritme nadi untuk menyusun pendekatan terapi yang personal dan terukur.',
-      imageUrl: '/src/assets/images/service_herbal_apothecary_1794541318909.jpg',
+      imageUrl: '/images/service_herbal_apothecary_1794541318909.jpg',
       content:
         'Dalam praktik Traditional Chinese Medicine (TCM), observasi lidah dan perabaan nadi merupakan pemeriksaan non-invasif yang membantu praktisi memahami kondisi energi vital, sirkulasi cairan, dan keseimbangan panas-dingin tubuh. Sebelum sesi konsultasi, pasien disarankan tidak mengonsumsi makanan atau minuman berwarna pekat agar warna alami selaput lidah dapat diamati dengan akurat.',
     },
@@ -996,7 +996,7 @@ export function createSeedDatabase(): ClinicDatabase {
       publishedDate: yesterday,
       excerpt:
         'Mengapa penggunaan kop sekali pakai, penapisan riwayat alergi serta obat pengencer darah, dan lembar persetujuan menjadi pilar keselamatan terapi.',
-      imageUrl: '/src/assets/images/hero_clinic_sanctuary_1794541318828.jpg',
+      imageUrl: '/images/hero_clinic_sanctuary_1794541318828.jpg',
       content:
         'Kenyamanan dan keamanan pasien berawal dari prosedur sterilisasi yang disiplin. Di ThibbunCare, seluruh jarum akupunktur, lancet, serta kop bekam kontak darah menggunakan perlengkapan sekali pakai dengan nomor batch dan masa kedaluwarsa yang tercatat di inventaris. Sebelum tindakan dimulai, praktisi wajib menjelaskan prosedur serta mencatat persetujuan resmi pasien atau wali.',
     },
@@ -1238,6 +1238,32 @@ export function migrateLoadedDatabase(parsed: ClinicDatabase): { db: ClinicDatab
       return { ...p, fullName: p.fullName.replace(' (Fiktif)', '') };
     }
     return p;
+  });
+  const normalizeLegacyImage = (url?: string): string | undefined => {
+    if (!url) return url;
+    if (url.includes('practitioner_female_hijab_1794541305490.jpg')) {
+      return '/images/practitioner_tcm_female_1794541320309.jpg';
+    }
+    if (url.startsWith('/src/assets/images/')) {
+      return url.replace('/src/assets/images/', '/images/');
+    }
+    return url;
+  };
+  parsed.practitioners = (parsed.practitioners || []).map((pr) => {
+    const nextUrl = normalizeLegacyImage(pr.photoUrl) || '/images/practitioner_tcm_female_1794541320309.jpg';
+    if (nextUrl !== pr.photoUrl) {
+      migrated = true;
+      return { ...pr, photoUrl: nextUrl };
+    }
+    return pr;
+  });
+  parsed.articles = (parsed.articles || []).map((art) => {
+    const nextUrl = normalizeLegacyImage(art.imageUrl);
+    if (nextUrl !== art.imageUrl) {
+      migrated = true;
+      return { ...art, imageUrl: nextUrl };
+    }
+    return art;
   });
   parsed.users = parsed.users.map((u) => {
     if (u.roles.some((r) => staffRoles.has(r)) && !u.passwordHash) {

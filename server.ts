@@ -3669,7 +3669,7 @@ export async function createApiApp(): Promise<express.Express> {
       title: String(title).trim(),
       specialty: String(specialty || 'Terapi Holistik & Konsultasi').trim(),
       bio: String(bio || 'Praktisi berpengalaman di klinik ThibbunCare.').trim(),
-      photoUrl: String(photoUrl || '/src/assets/images/practitioner_female_hijab_1794541305490.jpg'),
+      photoUrl: String(photoUrl || '/images/practitioner_tcm_female_1794541320309.jpg'),
       branchIds: assignedBranches,
       serviceIds: Array.isArray(serviceIds) && serviceIds.length > 0 ? serviceIds : db.services.map((s) => s.id),
       schedules: defaultSchedules,
