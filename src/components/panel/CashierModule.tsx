@@ -137,6 +137,10 @@ export const CashierModule: React.FC<CashierModuleProps> = ({
     e.preventDefault();
     setErrorMsg(null);
     setNotice(null);
+    if (extraProdId && !extraBatchId) {
+      setErrorMsg('Pilih nomor batch produk tambahan terlebih dahulu.');
+      return;
+    }
     try {
       const extraProductLines =
         extraProdId && extraBatchId ? [{ productId: extraProdId, batchId: extraBatchId, quantity: extraQty }] : [];
@@ -152,6 +156,8 @@ export const CashierModule: React.FC<CashierModuleProps> = ({
       setActiveInvoiceId(res.invoice.id);
       setPayAmount(res.invoice.totalAmount);
       setPayIdemKey(`pay-${Date.now()}`);
+      setExtraProdId('');
+      setExtraBatchId('');
       setNotice(`Invoice ${res.invoice.invoiceNumber} berhasil diterbitkan.`);
       await onRefresh();
     } catch (err) {
@@ -164,6 +170,10 @@ export const CashierModule: React.FC<CashierModuleProps> = ({
     if (!selectedInvoice) return;
     setErrorMsg(null);
     setNotice(null);
+    if (itemProdId && !itemBatchId) {
+      setErrorMsg('Pilih nomor batch produk terlebih dahulu sebelum menambahkan ke tagihan.');
+      return;
+    }
     try {
       const extraProductLines =
         itemProdId && itemBatchId ? [{ productId: itemProdId, batchId: itemBatchId, quantity: itemQty }] : [];
@@ -445,6 +455,14 @@ export const CashierModule: React.FC<CashierModuleProps> = ({
                     const rem = Math.max(0, inv.totalAmount - (inv.paidAmount - inv.refundedAmount));
                     setPayAmount(rem);
                     setPayIdemKey(`pay-${Date.now()}`);
+                    setPayRef('');
+                    setItemProdId('');
+                    setItemBatchId('');
+                    setItemDiscount(0);
+                    setItemDiscountReason('');
+                    setRefundAmount(0);
+                    setRefundReason('');
+                    setVoidReason('');
                   }}
                   className={`w-full px-4 py-3 text-left text-xs ${
                     active ? 'bg-[#F4F6F1]' : 'hover:bg-[#FBF8F3]'

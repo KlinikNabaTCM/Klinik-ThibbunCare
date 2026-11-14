@@ -90,6 +90,8 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
   const [editSrvName, setEditSrvName] = useState('');
   const [editSrvPrice, setEditSrvPrice] = useState(0);
   const [editSrvDuration, setEditSrvDuration] = useState(45);
+  const [editSrvDesc, setEditSrvDesc] = useState('');
+  const [editSrvConsent, setEditSrvConsent] = useState(true);
   const [newSrvCode, setNewSrvCode] = useState('');
   const [newSrvName, setNewSrvName] = useState('');
   const [newSrvCat, setNewSrvCat] = useState<ServiceItem['category']>('Akupresur');
@@ -97,10 +99,13 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
   const [newSrvDuration, setNewSrvDuration] = useState(45);
   const [newSrvConsent, setNewSrvConsent] = useState(true);
 
-  // Room add
+  // Room add & edit
   const [newRoomBranchId, setNewRoomBranchId] = useState('br-jkt');
   const [newRoomName, setNewRoomName] = useState('');
   const [newRoomType, setNewRoomType] = useState('Terapi Umum');
+  const [editingRoomId, setEditingRoomId] = useState<string | null>(null);
+  const [editRoomName, setEditRoomName] = useState('');
+  const [editRoomType, setEditRoomType] = useState('');
 
   // Holiday form
   const [holBranchId, setHolBranchId] = useState<string>('ALL');
@@ -281,11 +286,13 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
             name: editSrvName.trim() || undefined,
             price: Math.max(0, Number(editSrvPrice)),
             durationMinutes: Math.max(10, Number(editSrvDuration)),
+            description: editSrvDesc.trim() || undefined,
+            requiresConsent: editSrvConsent,
           },
         }),
       });
       setEditingServiceId(null);
-      setNotice('Nama, tarif, dan durasi layanan diperbarui (berlaku untuk transaksi berikutnya).');
+      setNotice('Nama, tarif, durasi & detail layanan diperbarui (berlaku untuk transaksi berikutnya).');
       await Promise.all([loadSettings(), onRefreshBootstrap()]);
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Gagal memperbarui tarif layanan.');
@@ -341,6 +348,25 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
       await Promise.all([loadSettings(), onRefreshBootstrap()]);
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Gagal menambah ruangan.');
+    }
+  };
+
+  const handleSaveRoomEdit = async (rm: Room) => {
+    setNotice(null);
+    setErrorMsg(null);
+    try {
+      await apiRequest(`/api/settings/rooms/${rm.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          name: editRoomName.trim() || rm.name,
+          type: editRoomType.trim() || rm.type,
+        }),
+      });
+      setEditingRoomId(null);
+      setNotice(`Ruangan ${editRoomName.trim() || rm.name} berhasil diperbarui.`);
+      await Promise.all([loadSettings(), onRefreshBootstrap()]);
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Gagal memperbarui ruangan.');
     }
   };
 
@@ -989,25 +1015,69 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                 return (
                   <div
                     key={rm.id}
-                    className="flex items-center justify-between gap-2 rounded border border-[#E4DDD0] bg-[#FBF8F3] px-3 py-2"
+                    className="rounded border border-[#E4DDD0] bg-[#FBF8F3] px-3 py-2 space-y-2"
                   >
-                    <div>
-                      <div className="font-semibold text-[#1F241D]">{rm.name}</div>
-                      <div className="text-[11px] text-[#5E645A]">
-                        {br?.name || rm.branchId} · {rm.type}
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <div className="font-semibold text-[#1F241D]">{rm.name}</div>
+                        <div className="text-[11px] text-[#5E645A]">
+                          {br?.name || rm.branchId} · {rm.type}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (editingRoomId === rm.id) {
+                              setEditingRoomId(null);
+                            } else {
+                              setEditingRoomId(rm.id);
+                              setEditRoomName(rm.name);
+                              setEditRoomType(rm.type);
+                            }
+                          }}
+                          className="rounded border border-[#734F2C] bg-white px-2 py-1 text-[11px] font-semibold text-[#5C3D21]"
+                        >
+                          {editingRoomId === rm.id ? 'Tutup' : 'Sunting'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleRoomActive(rm)}
+                          className={`rounded border px-2.5 py-1 text-[11px] font-semibold ${
+                            rm.active
+                              ? 'border-[#3D4F35] bg-[#3D4F35] text-white'
+                              : 'border-[#D4C5AF] bg-white text-[#5E645A]'
+                          }`}
+                        >
+                          {rm.active ? 'Aktif' : 'Nonaktif'}
+                        </button>
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => handleToggleRoomActive(rm)}
-                      className={`rounded border px-2.5 py-1 text-[11px] font-semibold ${
-                        rm.active
-                          ? 'border-[#3D4F35] bg-[#3D4F35] text-white'
-                          : 'border-[#D4C5AF] bg-white text-[#5E645A]'
-                      }`}
-                    >
-                      {rm.active ? 'Aktif' : 'Nonaktif'}
-                    </button>
+                    {editingRoomId === rm.id && (
+                      <div className="flex flex-wrap items-center gap-1.5 border-t border-[#E4DDD0] pt-2">
+                        <input
+                          type="text"
+                          value={editRoomName}
+                          onChange={(e) => setEditRoomName(e.target.value)}
+                          placeholder="Nama Ruangan"
+                          className="flex-1 rounded border border-[#D4C5AF] bg-white px-2 py-1"
+                        />
+                        <input
+                          type="text"
+                          value={editRoomType}
+                          onChange={(e) => setEditRoomType(e.target.value)}
+                          placeholder="Peruntukan Ruangan"
+                          className="flex-1 rounded border border-[#D4C5AF] bg-white px-2 py-1"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleSaveRoomEdit(rm)}
+                          className="rounded bg-[#3D4F35] px-2.5 py-1 text-[11px] font-semibold text-white"
+                        >
+                          Simpan
+                        </button>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -1065,46 +1135,65 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   <div>
                     <div className="font-semibold text-[#1F241D]">{srv.name}</div>
                     {editingServiceId === srv.id ? (
-                      <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                        <input
-                          type="text"
-                          value={editSrvName}
-                          onChange={(e) => setEditSrvName(e.target.value)}
-                          placeholder="Nama Layanan"
-                          className="w-56 rounded border border-[#D4C5AF] bg-[#FBF8F3] px-2 py-1"
-                        />
-                        <label className="text-[#4A5045]">Tarif (Rp):</label>
-                        <input
-                          type="number"
-                          min={0}
-                          step={5000}
-                          value={editSrvPrice}
-                          onChange={(e) => setEditSrvPrice(Number(e.target.value))}
-                          className="w-28 rounded border border-[#D4C5AF] bg-[#FBF8F3] px-2 py-1 font-mono"
-                        />
-                        <label className="text-[#4A5045]">Durasi (mnt):</label>
-                        <input
-                          type="number"
-                          min={10}
-                          step={5}
-                          value={editSrvDuration}
-                          onChange={(e) => setEditSrvDuration(Number(e.target.value))}
-                          className="w-20 rounded border border-[#D4C5AF] bg-[#FBF8F3] px-2 py-1 font-mono"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => handleSaveServiceTariff(srv.id)}
-                          className="rounded bg-[#3D4F35] px-2.5 py-1 font-semibold text-white"
-                        >
-                          Simpan
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setEditingServiceId(null)}
-                          className="rounded border border-[#D4C5AF] px-2.5 py-1"
-                        >
-                          Batal
-                        </button>
+                      <div className="mt-1.5 space-y-2 rounded border border-[#D4C5AF] bg-[#FBF8F3] p-2.5">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <input
+                            type="text"
+                            value={editSrvName}
+                            onChange={(e) => setEditSrvName(e.target.value)}
+                            placeholder="Nama Layanan"
+                            className="w-56 rounded border border-[#D4C5AF] bg-white px-2 py-1"
+                          />
+                          <label className="text-[#4A5045]">Tarif (Rp):</label>
+                          <input
+                            type="number"
+                            min={0}
+                            step={5000}
+                            value={editSrvPrice}
+                            onChange={(e) => setEditSrvPrice(Number(e.target.value))}
+                            className="w-28 rounded border border-[#D4C5AF] bg-white px-2 py-1 font-mono"
+                          />
+                          <label className="text-[#4A5045]">Durasi (mnt):</label>
+                          <input
+                            type="number"
+                            min={10}
+                            step={5}
+                            value={editSrvDuration}
+                            onChange={(e) => setEditSrvDuration(Number(e.target.value))}
+                            className="w-20 rounded border border-[#D4C5AF] bg-white px-2 py-1 font-mono"
+                          />
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <input
+                            type="text"
+                            value={editSrvDesc}
+                            onChange={(e) => setEditSrvDesc(e.target.value)}
+                            placeholder="Deskripsi layanan"
+                            className="min-w-[220px] flex-1 rounded border border-[#D4C5AF] bg-white px-2 py-1"
+                          />
+                          <label className="flex items-center gap-1.5 font-medium">
+                            <input
+                              type="checkbox"
+                              checked={editSrvConsent}
+                              onChange={(e) => setEditSrvConsent(e.target.checked)}
+                            />
+                            <span>Wajib Consent</span>
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => handleSaveServiceTariff(srv.id)}
+                            className="rounded bg-[#3D4F35] px-2.5 py-1 font-semibold text-white"
+                          >
+                            Simpan
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingServiceId(null)}
+                            className="rounded border border-[#D4C5AF] bg-white px-2.5 py-1"
+                          >
+                            Batal
+                          </button>
+                        </div>
                       </div>
                     ) : (
                       <div className="flex items-center gap-3 font-mono text-[#5E645A]">
@@ -1118,6 +1207,8 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                             setEditSrvName(srv.name);
                             setEditSrvPrice(srv.price);
                             setEditSrvDuration(srv.durationMinutes);
+                            setEditSrvDesc(srv.description);
+                            setEditSrvConsent(srv.requiresConsent);
                           }}
                           className="font-sans text-[11px] font-semibold text-[#734F2C] underline"
                         >

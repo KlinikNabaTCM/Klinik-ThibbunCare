@@ -433,6 +433,10 @@ export const ScheduleModule: React.FC<ScheduleModuleProps> = ({
         </form>
       )}
 
+      {!showCreate && formError && (
+        <div className="rounded bg-[#FEF2F2] p-3 text-xs font-medium text-[#991B1B]">{formError}</div>
+      )}
+
       {/* Reservations Table */}
       <div className="rounded-lg border border-[#E4DDD0] bg-white overflow-x-auto">
         <table className="w-full border-collapse text-left text-xs">
@@ -497,7 +501,14 @@ export const ScheduleModule: React.FC<ScheduleModuleProps> = ({
                         {(r.status === 'terkonfirmasi' || r.status === 'menunggu_konfirmasi') && (
                           <button
                             type="button"
-                            onClick={() => onCheckInReservation(r)}
+                            onClick={async () => {
+                              setFormError(null);
+                              try {
+                                await onCheckInReservation(r);
+                              } catch (err) {
+                                setFormError(err instanceof Error ? err.message : 'Gagal melakukan check-in.');
+                              }
+                            }}
                             className="rounded bg-[#3D4F35] px-2.5 py-1 font-semibold text-white"
                           >
                             Check-In

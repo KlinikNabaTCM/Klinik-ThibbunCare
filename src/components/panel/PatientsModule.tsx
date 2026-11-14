@@ -57,6 +57,7 @@ export const PatientsModule: React.FC<PatientsModuleProps> = ({
     gender: 'P' as 'L' | 'P',
     phone: '',
     address: '',
+    branchId: branches[0]?.id || '',
     guardianName: '',
     guardianRelation: '',
     emergencyContactName: '',
@@ -106,6 +107,7 @@ export const PatientsModule: React.FC<PatientsModuleProps> = ({
       gender: p.gender,
       phone: p.phone,
       address: p.address,
+      branchId: p.branchId,
       guardianName: p.guardianName || '',
       guardianRelation: p.guardianRelation || '',
       emergencyContactName: p.emergencyContactName || '',
@@ -569,7 +571,7 @@ export const PatientsModule: React.FC<PatientsModuleProps> = ({
                           className="mt-1 w-full rounded border border-[#D4C5AF] bg-[#FBF8F3] px-2.5 py-1.5"
                         />
                       </div>
-                      <div className="sm:col-span-2">
+                      <div>
                         <label className="block font-semibold text-[#4A5045]">Alamat</label>
                         <input
                           type="text"
@@ -577,6 +579,20 @@ export const PatientsModule: React.FC<PatientsModuleProps> = ({
                           onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
                           className="mt-1 w-full rounded border border-[#D4C5AF] bg-[#FBF8F3] px-2.5 py-1.5"
                         />
+                      </div>
+                      <div>
+                        <label className="block font-semibold text-[#4A5045]">Cabang Terdaftar</label>
+                        <select
+                          value={editForm.branchId}
+                          onChange={(e) => setEditForm({ ...editForm, branchId: e.target.value })}
+                          className="mt-1 w-full rounded border border-[#D4C5AF] bg-[#FBF8F3] px-2.5 py-1.5"
+                        >
+                          {branches.map((b) => (
+                            <option key={b.id} value={b.id}>
+                              {b.name}
+                            </option>
+                          ))}
+                        </select>
                       </div>
                       <div>
                         <label className="block font-semibold text-[#4A5045]">Hubungan Wali</label>

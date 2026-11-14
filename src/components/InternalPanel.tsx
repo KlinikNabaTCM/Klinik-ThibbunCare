@@ -158,7 +158,9 @@ export const InternalPanel: React.FC<InternalPanelProps> = ({
     { id: 'pengaturan', label: 'Pengaturan & Akses', icon: <Settings className="h-4 w-4" /> },
   ];
 
-  const allowedBranches = bootstrap.branches.filter((b) => currentAccount.branchIds.includes(b.id));
+  const allowedBranches = currentAccount.roles.includes('admin')
+    ? bootstrap.branches
+    : bootstrap.branches.filter((b) => currentAccount.branchIds.includes(b.id));
   const scopedBranches = allowedBranches.length > 0 ? allowedBranches : bootstrap.branches;
   const canManagePatients =
     currentAccount.roles.includes('admin') ||

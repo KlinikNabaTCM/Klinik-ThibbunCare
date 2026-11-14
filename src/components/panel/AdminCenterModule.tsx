@@ -90,6 +90,13 @@ const ALL_STAFF_ROLES: Array<{ role: Role; label: string }> = [
 
 const DAY_NAMES = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 
+const IMAGE_PRESETS: Array<{ label: string; url: string }> = [
+  { label: 'Praktisi Perempuan (TCM & Akupunktur)', url: '/images/practitioner_tcm_female_1794541320309.jpg' },
+  { label: 'Praktisi Laki-Laki (Bekam & Holistik)', url: '/images/practitioner_bekam_male_1794541319637.jpg' },
+  { label: 'Apotek Herbal & Edukasi Alami', url: '/images/service_herbal_apothecary_1794541318909.jpg' },
+  { label: 'Ruang Klinik ThibbunCare', url: '/images/hero_clinic_sanctuary_1794541318828.jpg' },
+];
+
 export const AdminCenterModule: React.FC<AdminCenterModuleProps> = ({
   currentAccount,
   onNavigateTab,
@@ -109,28 +116,59 @@ export const AdminCenterModule: React.FC<AdminCenterModuleProps> = ({
   const [newUserBranches, setNewUserBranches] = useState<string[]>(['br-jkt']);
   const [newUserClinical, setNewUserClinical] = useState(false);
 
-  // Per-user password reset & delete confirm
+  // Per-user profile & permissions edit, password reset & delete confirm
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [editUserName, setEditUserName] = useState('');
+  const [editUserEmail, setEditUserEmail] = useState('');
+  const [editUserActive, setEditUserActive] = useState(true);
+  const [editUserPerms, setEditUserPerms] = useState({
+    canAccessClinicalNotes: false,
+    canCorrectPayments: false,
+    canExportSensitive: false,
+    canManageSettings: false,
+    canManageStock: false,
+  });
   const [resetPwdMap, setResetPwdMap] = useState<Record<string, string>>({});
   const [confirmDeleteUserId, setConfirmDeleteUserId] = useState<string | null>(null);
 
-  // Practitioner form + schedule editor
+  // Practitioner form + profile & schedule editor
   const [pracName, setPracName] = useState('');
   const [pracTitle, setPracTitle] = useState('');
   const [pracSpecialty, setPracSpecialty] = useState('');
   const [pracBio, setPracBio] = useState('');
+  const [pracPhotoUrl, setPracPhotoUrl] = useState('/images/practitioner_tcm_female_1794541320309.jpg');
   const [pracBranches, setPracBranches] = useState<string[]>(['br-jkt']);
   const [editingPracId, setEditingPracId] = useState<string | null>(null);
   const [editPracSchedules, setEditPracSchedules] = useState<PractitionerSchedule[]>([]);
+  const [editingPracProfileId, setEditingPracProfileId] = useState<string | null>(null);
+  const [editPracName, setEditPracName] = useState('');
+  const [editPracTitle, setEditPracTitle] = useState('');
+  const [editPracSpecialty, setEditPracSpecialty] = useState('');
+  const [editPracBio, setEditPracBio] = useState('');
+  const [editPracPhotoUrl, setEditPracPhotoUrl] = useState('');
+  const [editPracServiceIds, setEditPracServiceIds] = useState<string[]>([]);
 
-  // Branch & room & holiday form
+  // Branch & room & holiday form + inline editors
   const [newBrCode, setNewBrCode] = useState('');
   const [newBrName, setNewBrName] = useState('');
   const [newBrAddress, setNewBrAddress] = useState('');
   const [newBrPhone, setNewBrPhone] = useState('');
   const [newBrWa, setNewBrWa] = useState('');
+  const [newBrHours, setNewBrHours] = useState('Senin–Sabtu, 08:00–20:00 WIB');
+  const [editingBranchId, setEditingBranchId] = useState<string | null>(null);
+  const [editBrName, setEditBrName] = useState('');
+  const [editBrAddress, setEditBrAddress] = useState('');
+  const [editBrPhone, setEditBrPhone] = useState('');
+  const [editBrWa, setEditBrWa] = useState('');
+  const [editBrHours, setEditBrHours] = useState('');
+
   const [newRoomBr, setNewRoomBr] = useState('br-jkt');
   const [newRoomName, setNewRoomName] = useState('');
   const [newRoomType, setNewRoomType] = useState('Terapi Umum');
+  const [editingRoomId, setEditingRoomId] = useState<string | null>(null);
+  const [editRmName, setEditRmName] = useState('');
+  const [editRmType, setEditRmType] = useState('');
+
   const [holBr, setHolBr] = useState('ALL');
   const [holDate, setHolDate] = useState(todayJakartaISO());
   const [holLabel, setHolLabel] = useState('');
@@ -145,18 +183,32 @@ export const AdminCenterModule: React.FC<AdminCenterModuleProps> = ({
   const [srvConsent, setSrvConsent] = useState(true);
   const [editSrvId, setEditSrvId] = useState<string | null>(null);
   const [editSrvName, setEditSrvName] = useState('');
+  const [editSrvCat, setEditSrvCat] = useState<ServiceItem['category']>('Akupresur');
   const [editSrvPrice, setEditSrvPrice] = useState(0);
   const [editSrvDuration, setEditSrvDuration] = useState(45);
   const [editSrvDesc, setEditSrvDesc] = useState('');
+  const [editSrvConsent, setEditSrvConsent] = useState(true);
 
-  // Content: Articles & FAQs
+  // Content: Articles & FAQs + inline editors
   const [artTitle, setArtTitle] = useState('');
   const [artCat, setArtCat] = useState('Edukasi Kesehatan');
   const [artReadMin, setArtReadMin] = useState(4);
+  const [artImageUrl, setArtImageUrl] = useState('/images/service_herbal_apothecary_1794541318909.jpg');
   const [artExcerpt, setArtExcerpt] = useState('');
   const [artContent, setArtContent] = useState('');
+  const [editingArtId, setEditingArtId] = useState<string | null>(null);
+  const [editArtTitle, setEditArtTitle] = useState('');
+  const [editArtCat, setEditArtCat] = useState('');
+  const [editArtReadMin, setEditArtReadMin] = useState(4);
+  const [editArtImageUrl, setEditArtImageUrl] = useState('');
+  const [editArtExcerpt, setEditArtExcerpt] = useState('');
+  const [editArtContent, setEditArtContent] = useState('');
+
   const [faqQuestion, setFaqQuestion] = useState('');
   const [faqAnswer, setFaqAnswer] = useState('');
+  const [editingFaqId, setEditingFaqId] = useState<string | null>(null);
+  const [editFaqQuestion, setEditFaqQuestion] = useState('');
+  const [editFaqAnswer, setEditFaqAnswer] = useState('');
 
   const loadAdminOverview = async () => {
     setErrorMsg(null);
@@ -244,6 +296,20 @@ export const AdminCenterModule: React.FC<AdminCenterModuleProps> = ({
     }
   };
 
+  const handleSaveUserProfileAndPerms = async (u: UserAccount) => {
+    await handlePatchUser(
+      u,
+      {
+        name: editUserName.trim() || u.name,
+        email: editUserEmail.trim() || u.email,
+        active: u.id === currentAccount.id ? u.active : editUserActive,
+        permissions: editUserPerms,
+      },
+      `Profil & hak izin akun ${editUserName.trim() || u.name} berhasil disimpan.`
+    );
+    setEditingUserId(null);
+  };
+
   // Practitioner Handlers
   const handleCreatePractitioner = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -256,6 +322,7 @@ export const AdminCenterModule: React.FC<AdminCenterModuleProps> = ({
           title: pracTitle,
           specialty: pracSpecialty,
           bio: pracBio,
+          photoUrl: pracPhotoUrl,
           branchIds: pracBranches,
         }),
       });
@@ -266,6 +333,27 @@ export const AdminCenterModule: React.FC<AdminCenterModuleProps> = ({
       await syncAfterMutation('Praktisi baru berhasil ditambahkan & tampil di Website Publik.');
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Gagal menambah praktisi.');
+    }
+  };
+
+  const handleSavePracProfile = async (prac: Practitioner) => {
+    setErrorMsg(null);
+    try {
+      await apiRequest(`/api/admin/practitioners/${prac.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          name: editPracName.trim() || prac.name,
+          title: editPracTitle.trim() || prac.title,
+          specialty: editPracSpecialty.trim(),
+          bio: editPracBio.trim(),
+          photoUrl: editPracPhotoUrl.trim() || prac.photoUrl,
+          serviceIds: editPracServiceIds.length > 0 ? editPracServiceIds : prac.serviceIds,
+        }),
+      });
+      setEditingPracProfileId(null);
+      await syncAfterMutation(`Profil praktisi ${editPracName.trim() || prac.name} diperbarui.`);
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Gagal menyimpan profil praktisi.');
     }
   };
 
@@ -287,16 +375,26 @@ export const AdminCenterModule: React.FC<AdminCenterModuleProps> = ({
     const has = prac.branchIds.includes(branchId);
     if (has && prac.branchIds.length === 1) return;
     const next = has ? prac.branchIds.filter((b) => b !== branchId) : [...prac.branchIds, branchId];
-    await apiRequest(`/api/admin/practitioners/${prac.id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ branchIds: next }),
-    });
-    await syncAfterMutation(`Cabang tugas ${prac.name} diperbarui.`);
+    setErrorMsg(null);
+    try {
+      await apiRequest(`/api/admin/practitioners/${prac.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ branchIds: next }),
+      });
+      await syncAfterMutation(`Cabang tugas ${prac.name} diperbarui.`);
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Gagal memperbarui cabang tugas praktisi.');
+    }
   };
 
   const handleDeletePractitioner = async (id: string) => {
-    await apiRequest(`/api/admin/practitioners/${id}`, { method: 'DELETE' });
-    await syncAfterMutation('Praktisi dihapus.');
+    setErrorMsg(null);
+    try {
+      await apiRequest(`/api/admin/practitioners/${id}`, { method: 'DELETE' });
+      await syncAfterMutation('Praktisi dihapus.');
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Gagal menghapus praktisi.');
+    }
   };
 
   // Branch, Room, Holiday Handlers
@@ -312,6 +410,7 @@ export const AdminCenterModule: React.FC<AdminCenterModuleProps> = ({
           address: newBrAddress,
           phone: newBrPhone,
           whatsapp: newBrWa,
+          operatingHours: newBrHours,
         }),
       });
       setNewBrCode('');
@@ -319,51 +418,114 @@ export const AdminCenterModule: React.FC<AdminCenterModuleProps> = ({
       setNewBrAddress('');
       setNewBrPhone('');
       setNewBrWa('');
+      setNewBrHours('Senin–Sabtu, 08:00–20:00 WIB');
       await syncAfterMutation('Cabang baru berhasil ditambahkan.');
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Gagal menambah cabang.');
     }
   };
 
+  const handleSaveBranchEdit = async (br: Branch) => {
+    setErrorMsg(null);
+    try {
+      await apiRequest(`/api/settings/branches/${br.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          name: editBrName.trim() || br.name,
+          address: editBrAddress.trim() || br.address,
+          phone: editBrPhone.trim() || '-',
+          whatsapp: editBrWa.trim() || br.whatsapp,
+          operatingHours: editBrHours.trim() || br.operatingHours,
+        }),
+      });
+      setEditingBranchId(null);
+      await syncAfterMutation(`Detail cabang ${editBrName.trim() || br.name} diperbarui.`);
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Gagal memperbarui detail cabang.');
+    }
+  };
+
   const handleToggleBranchActive = async (br: Branch) => {
-    await apiRequest(`/api/settings/branches/${br.id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ active: !br.active }),
-    });
-    await syncAfterMutation(`Status cabang ${br.name} diperbarui.`);
+    setErrorMsg(null);
+    try {
+      await apiRequest(`/api/settings/branches/${br.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ active: !br.active }),
+      });
+      await syncAfterMutation(`Status cabang ${br.name} diperbarui.`);
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Gagal mengubah status cabang.');
+    }
   };
 
   const handleCreateRoom = async (e: React.FormEvent) => {
     e.preventDefault();
-    await apiRequest('/api/settings/rooms', {
-      method: 'POST',
-      body: JSON.stringify({ branchId: newRoomBr, name: newRoomName, type: newRoomType }),
-    });
-    setNewRoomName('');
-    await syncAfterMutation('Ruangan terapi ditambahkan.');
+    setErrorMsg(null);
+    try {
+      await apiRequest('/api/settings/rooms', {
+        method: 'POST',
+        body: JSON.stringify({ branchId: newRoomBr, name: newRoomName, type: newRoomType }),
+      });
+      setNewRoomName('');
+      await syncAfterMutation('Ruangan terapi ditambahkan.');
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Gagal menambah ruangan.');
+    }
+  };
+
+  const handleSaveRoomEdit = async (rm: Room) => {
+    setErrorMsg(null);
+    try {
+      await apiRequest(`/api/settings/rooms/${rm.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          name: editRmName.trim() || rm.name,
+          type: editRmType.trim() || rm.type,
+        }),
+      });
+      setEditingRoomId(null);
+      await syncAfterMutation(`Ruangan ${editRmName.trim() || rm.name} diperbarui.`);
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Gagal memperbarui ruangan.');
+    }
   };
 
   const handleToggleRoomActive = async (rm: Room) => {
-    await apiRequest(`/api/settings/rooms/${rm.id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ active: !rm.active }),
-    });
-    await syncAfterMutation(`Status ruangan ${rm.name} diperbarui.`);
+    setErrorMsg(null);
+    try {
+      await apiRequest(`/api/settings/rooms/${rm.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ active: !rm.active }),
+      });
+      await syncAfterMutation(`Status ruangan ${rm.name} diperbarui.`);
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Gagal mengubah status ruangan.');
+    }
   };
 
   const handleCreateHoliday = async (e: React.FormEvent) => {
     e.preventDefault();
-    await apiRequest('/api/settings/holidays', {
-      method: 'POST',
-      body: JSON.stringify({ branchId: holBr, date: holDate, label: holLabel }),
-    });
-    setHolLabel('');
-    await syncAfterMutation('Hari libur klinik ditambahkan.');
+    setErrorMsg(null);
+    try {
+      await apiRequest('/api/settings/holidays', {
+        method: 'POST',
+        body: JSON.stringify({ branchId: holBr, date: holDate, label: holLabel }),
+      });
+      setHolLabel('');
+      await syncAfterMutation('Hari libur klinik ditambahkan.');
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Gagal menambah hari libur.');
+    }
   };
 
   const handleDeleteHoliday = async (id: string) => {
-    await apiRequest(`/api/settings/holidays/${id}`, { method: 'DELETE' });
-    await syncAfterMutation('Hari libur dihapus.');
+    setErrorMsg(null);
+    try {
+      await apiRequest(`/api/settings/holidays/${id}`, { method: 'DELETE' });
+      await syncAfterMutation('Hari libur dihapus.');
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Gagal menghapus hari libur.');
+    }
   };
 
   // Service Handlers
@@ -399,30 +561,42 @@ export const AdminCenterModule: React.FC<AdminCenterModuleProps> = ({
   };
 
   const handleSaveServiceEdit = async (srvId: string) => {
-    await apiRequest('/api/settings', {
-      method: 'PATCH',
-      body: JSON.stringify({
-        serviceUpdate: {
-          id: srvId,
-          name: editSrvName.trim(),
-          price: Number(editSrvPrice),
-          durationMinutes: Number(editSrvDuration),
-          description: editSrvDesc.trim(),
-        },
-      }),
-    });
-    setEditSrvId(null);
-    await syncAfterMutation('Layanan & tarif diperbarui (tersinkron ke Website Publik & Kasir).');
+    setErrorMsg(null);
+    try {
+      await apiRequest('/api/settings', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          serviceUpdate: {
+            id: srvId,
+            name: editSrvName.trim(),
+            category: editSrvCat,
+            price: Number(editSrvPrice),
+            durationMinutes: Number(editSrvDuration),
+            description: editSrvDesc.trim(),
+            requiresConsent: editSrvConsent,
+          },
+        }),
+      });
+      setEditSrvId(null);
+      await syncAfterMutation('Layanan & tarif diperbarui (tersinkron ke Website Publik & Kasir).');
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Gagal memperbarui layanan.');
+    }
   };
 
   const handleToggleServiceBranch = async (srv: ServiceItem, branchId: string) => {
     const has = srv.activeBranchIds.includes(branchId);
     const next = has ? srv.activeBranchIds.filter((b) => b !== branchId) : [...srv.activeBranchIds, branchId];
-    await apiRequest('/api/settings', {
-      method: 'PATCH',
-      body: JSON.stringify({ serviceUpdate: { id: srv.id, activeBranchIds: next } }),
-    });
-    await syncAfterMutation(`Ketersediaan cabang layanan ${srv.name} diperbarui.`);
+    setErrorMsg(null);
+    try {
+      await apiRequest('/api/settings', {
+        method: 'PATCH',
+        body: JSON.stringify({ serviceUpdate: { id: srv.id, activeBranchIds: next } }),
+      });
+      await syncAfterMutation(`Ketersediaan cabang layanan ${srv.name} diperbarui.`);
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Gagal mengubah ketersediaan cabang layanan.');
+    }
   };
 
   // Article & FAQ Handlers
@@ -436,6 +610,7 @@ export const AdminCenterModule: React.FC<AdminCenterModuleProps> = ({
           title: artTitle,
           category: artCat,
           readTimeMinutes: Number(artReadMin),
+          imageUrl: artImageUrl,
           excerpt: artExcerpt,
           content: artContent,
         }),
@@ -449,9 +624,35 @@ export const AdminCenterModule: React.FC<AdminCenterModuleProps> = ({
     }
   };
 
+  const handleSaveArticleEdit = async (artId: string) => {
+    setErrorMsg(null);
+    try {
+      await apiRequest(`/api/admin/articles/${artId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          title: editArtTitle.trim(),
+          category: editArtCat.trim(),
+          readTimeMinutes: Number(editArtReadMin) || 4,
+          imageUrl: editArtImageUrl.trim(),
+          excerpt: editArtExcerpt.trim(),
+          content: editArtContent.trim(),
+        }),
+      });
+      setEditingArtId(null);
+      await syncAfterMutation('Artikel edukasi berhasil diperbarui di Website Publik.');
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Gagal memperbarui artikel.');
+    }
+  };
+
   const handleDeleteArticle = async (id: string) => {
-    await apiRequest(`/api/admin/articles/${id}`, { method: 'DELETE' });
-    await syncAfterMutation('Artikel edukasi dihapus.');
+    setErrorMsg(null);
+    try {
+      await apiRequest(`/api/admin/articles/${id}`, { method: 'DELETE' });
+      await syncAfterMutation('Artikel edukasi dihapus.');
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Gagal menghapus artikel.');
+    }
   };
 
   const handleCreateFaq = async (e: React.FormEvent) => {
@@ -470,9 +671,31 @@ export const AdminCenterModule: React.FC<AdminCenterModuleProps> = ({
     }
   };
 
+  const handleSaveFaqEdit = async (faqId: string) => {
+    setErrorMsg(null);
+    try {
+      await apiRequest(`/api/admin/faqs/${faqId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          question: editFaqQuestion.trim(),
+          answer: editFaqAnswer.trim(),
+        }),
+      });
+      setEditingFaqId(null);
+      await syncAfterMutation('FAQ publik berhasil diperbarui.');
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Gagal memperbarui FAQ.');
+    }
+  };
+
   const handleDeleteFaq = async (id: string) => {
-    await apiRequest(`/api/admin/faqs/${id}`, { method: 'DELETE' });
-    await syncAfterMutation('FAQ dihapus.');
+    setErrorMsg(null);
+    try {
+      await apiRequest(`/api/admin/faqs/${id}`, { method: 'DELETE' });
+      await syncAfterMutation('FAQ dihapus.');
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Gagal menghapus FAQ.');
+    }
   };
 
   if (loading && !data) {
@@ -854,6 +1077,29 @@ export const AdminCenterModule: React.FC<AdminCenterModuleProps> = ({
                       <div className="flex flex-wrap items-center gap-1.5">
                         <button
                           type="button"
+                          onClick={() => {
+                            if (editingUserId === u.id) {
+                              setEditingUserId(null);
+                            } else {
+                              setEditingUserId(u.id);
+                              setEditUserName(u.name);
+                              setEditUserEmail(u.email);
+                              setEditUserActive(u.active);
+                              setEditUserPerms({
+                                canAccessClinicalNotes: u.permissions.canAccessClinicalNotes,
+                                canCorrectPayments: u.permissions.canCorrectPayments,
+                                canExportSensitive: u.permissions.canExportSensitive,
+                                canManageSettings: u.permissions.canManageSettings,
+                                canManageStock: u.permissions.canManageStock,
+                              });
+                            }
+                          }}
+                          className="rounded border border-[#734F2C] bg-[#FBF8F3] px-2.5 py-1 font-semibold text-[#5C3D21]"
+                        >
+                          {editingUserId === u.id ? 'Tutup Edit' : 'Sunting Profil & Izin'}
+                        </button>
+                        <button
+                          type="button"
                           onClick={() =>
                             handlePatchUser(
                               u,
@@ -914,6 +1160,110 @@ export const AdminCenterModule: React.FC<AdminCenterModuleProps> = ({
                         )}
                       </div>
                     </div>
+
+                    {editingUserId === u.id && (
+                      <div className="rounded border border-[#D4C5AF] bg-[#FBF8F3] p-3 space-y-2.5">
+                        <div className="font-semibold text-[#2F3E29]">Sunting Profil & 5 Izin Detail Akun</div>
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                          <input
+                            type="text"
+                            value={editUserName}
+                            onChange={(e) => setEditUserName(e.target.value)}
+                            placeholder="Nama lengkap staf"
+                            className="rounded border border-[#D4C5AF] bg-white px-2.5 py-1.5"
+                          />
+                          <input
+                            type="email"
+                            value={editUserEmail}
+                            onChange={(e) => setEditUserEmail(e.target.value)}
+                            placeholder="Email login"
+                            className="rounded border border-[#D4C5AF] bg-white px-2.5 py-1.5 font-mono"
+                          />
+                          {u.id !== currentAccount.id ? (
+                            <label className="flex items-center gap-2 rounded border border-[#D4C5AF] bg-white px-2.5 py-1.5 font-medium">
+                              <input
+                                type="checkbox"
+                                checked={editUserActive}
+                                onChange={(e) => setEditUserActive(e.target.checked)}
+                              />
+                              <span>Akun Aktif Dapat Login</span>
+                            </label>
+                          ) : (
+                            <div className="flex items-center rounded border border-[#E4DDD0] bg-white px-2.5 py-1.5 text-[#5E645A]">
+                              Akun aktif saat ini
+                            </div>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 lg:grid-cols-5 text-[11px]">
+                          <label className="flex items-center gap-1.5 rounded border border-[#E4DDD0] bg-white px-2 py-1.5">
+                            <input
+                              type="checkbox"
+                              checked={editUserPerms.canManageSettings}
+                              onChange={(e) =>
+                                setEditUserPerms((prev) => ({ ...prev, canManageSettings: e.target.checked }))
+                              }
+                            />
+                            <span>Kelola Pengaturan</span>
+                          </label>
+                          <label className="flex items-center gap-1.5 rounded border border-[#E4DDD0] bg-white px-2 py-1.5">
+                            <input
+                              type="checkbox"
+                              checked={editUserPerms.canAccessClinicalNotes}
+                              onChange={(e) =>
+                                setEditUserPerms((prev) => ({ ...prev, canAccessClinicalNotes: e.target.checked }))
+                              }
+                            />
+                            <span>Catatan Klinis</span>
+                          </label>
+                          <label className="flex items-center gap-1.5 rounded border border-[#E4DDD0] bg-white px-2 py-1.5">
+                            <input
+                              type="checkbox"
+                              checked={editUserPerms.canCorrectPayments}
+                              onChange={(e) =>
+                                setEditUserPerms((prev) => ({ ...prev, canCorrectPayments: e.target.checked }))
+                              }
+                            />
+                            <span>Koreksi Pembayaran</span>
+                          </label>
+                          <label className="flex items-center gap-1.5 rounded border border-[#E4DDD0] bg-white px-2 py-1.5">
+                            <input
+                              type="checkbox"
+                              checked={editUserPerms.canManageStock}
+                              onChange={(e) =>
+                                setEditUserPerms((prev) => ({ ...prev, canManageStock: e.target.checked }))
+                              }
+                            />
+                            <span>Kelola Stok</span>
+                          </label>
+                          <label className="flex items-center gap-1.5 rounded border border-[#E4DDD0] bg-white px-2 py-1.5">
+                            <input
+                              type="checkbox"
+                              checked={editUserPerms.canExportSensitive}
+                              onChange={(e) =>
+                                setEditUserPerms((prev) => ({ ...prev, canExportSensitive: e.target.checked }))
+                              }
+                            />
+                            <span>Ekspor Sensitif</span>
+                          </label>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleSaveUserProfileAndPerms(u)}
+                            className="rounded bg-[#3D4F35] px-3 py-1.5 font-semibold text-white"
+                          >
+                            Simpan Perubahan Akun
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingUserId(null)}
+                            className="rounded border border-[#D4C5AF] bg-white px-3 py-1.5"
+                          >
+                            Batal
+                          </button>
+                        </div>
+                      </div>
+                    )}
 
                     <div className="flex flex-wrap items-center gap-4 text-[11px]">
                       <div className="flex flex-wrap items-center gap-1">
@@ -1061,6 +1411,26 @@ export const AdminCenterModule: React.FC<AdminCenterModuleProps> = ({
                 className="rounded border border-[#D4C5AF] bg-[#FBF8F3] px-3 py-2"
               />
             </div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <select
+                value={pracPhotoUrl}
+                onChange={(e) => setPracPhotoUrl(e.target.value)}
+                className="rounded border border-[#D4C5AF] bg-[#FBF8F3] px-3 py-2"
+              >
+                {IMAGE_PRESETS.map((preset) => (
+                  <option key={preset.url} value={preset.url}>
+                    Preset Foto: {preset.label}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="text"
+                value={pracPhotoUrl}
+                onChange={(e) => setPracPhotoUrl(e.target.value)}
+                placeholder="Atau URL Foto Praktisi (/images/...)"
+                className="rounded border border-[#D4C5AF] bg-[#FBF8F3] px-3 py-2 font-mono"
+              />
+            </div>
             <textarea
               rows={2}
               value={pracBio}
@@ -1126,6 +1496,25 @@ export const AdminCenterModule: React.FC<AdminCenterModuleProps> = ({
                     <button
                       type="button"
                       onClick={() => {
+                        if (editingPracProfileId === p.id) {
+                          setEditingPracProfileId(null);
+                        } else {
+                          setEditingPracProfileId(p.id);
+                          setEditPracName(p.name);
+                          setEditPracTitle(p.title);
+                          setEditPracSpecialty(p.specialty);
+                          setEditPracBio(p.bio);
+                          setEditPracPhotoUrl(p.photoUrl);
+                          setEditPracServiceIds([...p.serviceIds]);
+                        }
+                      }}
+                      className="rounded border border-[#3D4F35] px-2.5 py-1 font-semibold text-[#2F3E29]"
+                    >
+                      {editingPracProfileId === p.id ? 'Tutup Profil' : 'Sunting Profil'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
                         if (editingPracId === p.id) {
                           setEditingPracId(null);
                         } else {
@@ -1147,18 +1536,150 @@ export const AdminCenterModule: React.FC<AdminCenterModuleProps> = ({
                   </div>
                 </div>
 
+                {editingPracProfileId === p.id && (
+                  <div className="rounded border border-[#D4C5AF] bg-[#FBF8F3] p-3 space-y-2.5">
+                    <div className="font-semibold text-[#2F3E29]">Sunting Profil Praktisi & Layanan Keahlian</div>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                      <input
+                        type="text"
+                        value={editPracName}
+                        onChange={(e) => setEditPracName(e.target.value)}
+                        placeholder="Nama & Gelar"
+                        className="rounded border border-[#D4C5AF] bg-white px-2.5 py-1.5"
+                      />
+                      <input
+                        type="text"
+                        value={editPracTitle}
+                        onChange={(e) => setEditPracTitle(e.target.value)}
+                        placeholder="Jabatan"
+                        className="rounded border border-[#D4C5AF] bg-white px-2.5 py-1.5"
+                      />
+                      <input
+                        type="text"
+                        value={editPracSpecialty}
+                        onChange={(e) => setEditPracSpecialty(e.target.value)}
+                        placeholder="Keahlian Utama"
+                        className="rounded border border-[#D4C5AF] bg-white px-2.5 py-1.5"
+                      />
+                    </div>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <select
+                        value={IMAGE_PRESETS.some((pr) => pr.url === editPracPhotoUrl) ? editPracPhotoUrl : ''}
+                        onChange={(e) => {
+                          if (e.target.value) setEditPracPhotoUrl(e.target.value);
+                        }}
+                        className="rounded border border-[#D4C5AF] bg-white px-2.5 py-1.5"
+                      >
+                        <option value="">-- Pilih Preset Foto --</option>
+                        {IMAGE_PRESETS.map((preset) => (
+                          <option key={preset.url} value={preset.url}>
+                            {preset.label}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        type="text"
+                        value={editPracPhotoUrl}
+                        onChange={(e) => setEditPracPhotoUrl(e.target.value)}
+                        placeholder="URL Foto (/images/...)"
+                        className="rounded border border-[#D4C5AF] bg-white px-2.5 py-1.5 font-mono"
+                      />
+                    </div>
+                    <textarea
+                      rows={2}
+                      value={editPracBio}
+                      onChange={(e) => setEditPracBio(e.target.value)}
+                      placeholder="Bio praktisi"
+                      className="w-full rounded border border-[#D4C5AF] bg-white p-2"
+                    />
+                    <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                      <span className="font-semibold text-[#4A5045]">Layanan Ditangani:</span>
+                      {data.services.map((srv) => {
+                        const checked = editPracServiceIds.includes(srv.id);
+                        return (
+                          <button
+                            key={srv.id}
+                            type="button"
+                            onClick={() =>
+                              setEditPracServiceIds((prev) =>
+                                checked
+                                  ? prev.length > 1
+                                    ? prev.filter((id) => id !== srv.id)
+                                    : prev
+                                  : [...prev, srv.id]
+                              )
+                            }
+                            className={`rounded border px-2 py-0.5 ${
+                              checked
+                                ? 'border-[#3D4F35] bg-[#3D4F35] text-white'
+                                : 'border-[#D4C5AF] bg-white text-[#5E645A]'
+                            }`}
+                          >
+                            {srv.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleSavePracProfile(p)}
+                        className="rounded bg-[#3D4F35] px-3 py-1.5 font-semibold text-white"
+                      >
+                        Simpan Profil Praktisi
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditingPracProfileId(null)}
+                        className="rounded border border-[#D4C5AF] bg-white px-3 py-1.5"
+                      >
+                        Batal
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {editingPracId === p.id && (
                   <div className="border-t border-[#EFE8DC] pt-3 space-y-2">
                     <div className="font-semibold text-[#2F3E29]">
                       Jadwal Mingguan (Mempengaruhi Slot Booking Website Publik, Portal Pasien & Kalender)
                     </div>
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
                       {editPracSchedules.map((sch, idx) => (
                         <div
                           key={`${sch.dayOfWeek}-${idx}`}
                           className="flex flex-wrap items-center gap-1.5 rounded border border-[#E4DDD0] bg-[#FBF8F3] p-2"
                         >
-                          <span className="w-16 font-semibold">{DAY_NAMES[sch.dayOfWeek]}</span>
+                          <select
+                            value={sch.dayOfWeek}
+                            onChange={(e) => {
+                              const next = [...editPracSchedules];
+                              next[idx] = { ...next[idx], dayOfWeek: Number(e.target.value) };
+                              setEditPracSchedules(next);
+                            }}
+                            className="rounded border border-[#D4C5AF] bg-white px-1.5 py-1 font-semibold"
+                          >
+                            {DAY_NAMES.map((dayLabel, dayIdx) => (
+                              <option key={dayIdx} value={dayIdx}>
+                                {dayLabel}
+                              </option>
+                            ))}
+                          </select>
+                          <select
+                            value={sch.branchId}
+                            onChange={(e) => {
+                              const next = [...editPracSchedules];
+                              next[idx] = { ...next[idx], branchId: e.target.value };
+                              setEditPracSchedules(next);
+                            }}
+                            className="rounded border border-[#D4C5AF] bg-white px-1.5 py-1 font-mono"
+                          >
+                            {data.branches.map((br) => (
+                              <option key={br.id} value={br.id}>
+                                {br.code}
+                              </option>
+                            ))}
+                          </select>
                           <input
                             type="time"
                             value={sch.startTime}
@@ -1199,10 +1720,10 @@ export const AdminCenterModule: React.FC<AdminCenterModuleProps> = ({
                           setEditPracSchedules([
                             ...editPracSchedules,
                             {
-                              dayOfWeek: 0,
+                              dayOfWeek: 1,
                               startTime: '09:00',
-                              endTime: '15:00',
-                              branchId: p.branchIds[0] || 'br-jkt',
+                              endTime: '17:00',
+                              branchId: p.branchIds[0] || data.branches[0]?.id || 'br-jkt',
                             },
                           ])
                         }
@@ -1235,27 +1756,104 @@ export const AdminCenterModule: React.FC<AdminCenterModuleProps> = ({
             </h2>
             <div className="divide-y divide-[#EFE8DC]">
               {data.branches.map((br) => (
-                <div key={br.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
-                  <div>
-                    <div className="font-semibold text-[#1F241D]">
-                      {br.name} <span className="font-mono text-[#5E645A]">({br.code})</span>
+                <div key={br.id} className="py-3 space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <div className="font-semibold text-[#1F241D]">
+                        {br.name} <span className="font-mono text-[#5E645A]">({br.code})</span>
+                      </div>
+                      <div className="text-[#4A5045]">{br.address}</div>
+                      <div className="font-mono text-[11px] text-[#5E645A]">
+                        {br.operatingHours} · Telp {br.phone} · WA {br.whatsapp}
+                      </div>
                     </div>
-                    <div className="text-[#4A5045]">{br.address}</div>
-                    <div className="font-mono text-[11px] text-[#5E645A]">
-                      {br.operatingHours} · WA {br.whatsapp}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (editingBranchId === br.id) {
+                            setEditingBranchId(null);
+                          } else {
+                            setEditingBranchId(br.id);
+                            setEditBrName(br.name);
+                            setEditBrAddress(br.address);
+                            setEditBrPhone(br.phone);
+                            setEditBrWa(br.whatsapp);
+                            setEditBrHours(br.operatingHours);
+                          }
+                        }}
+                        className="rounded border border-[#734F2C] px-2.5 py-1 font-semibold text-[#5C3D21]"
+                      >
+                        {editingBranchId === br.id ? 'Tutup' : 'Sunting'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleBranchActive(br)}
+                        className={`rounded border px-3 py-1 font-semibold ${
+                          br.active
+                            ? 'border-[#3D4F35] bg-[#3D4F35] text-white'
+                            : 'border-[#D4C5AF] bg-[#FBF8F3] text-[#5E645A]'
+                        }`}
+                      >
+                        {br.active ? 'Cabang Aktif' : 'Nonaktif'}
+                      </button>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => handleToggleBranchActive(br)}
-                    className={`rounded border px-3 py-1 font-semibold ${
-                      br.active
-                        ? 'border-[#3D4F35] bg-[#3D4F35] text-white'
-                        : 'border-[#D4C5AF] bg-[#FBF8F3] text-[#5E645A]'
-                    }`}
-                  >
-                    {br.active ? 'Cabang Aktif' : 'Nonaktif'}
-                  </button>
+                  {editingBranchId === br.id && (
+                    <div className="grid grid-cols-1 gap-2 rounded border border-[#D4C5AF] bg-[#FBF8F3] p-3 sm:grid-cols-2">
+                      <input
+                        type="text"
+                        value={editBrName}
+                        onChange={(e) => setEditBrName(e.target.value)}
+                        placeholder="Nama Cabang"
+                        className="rounded border border-[#D4C5AF] bg-white px-2.5 py-1.5"
+                      />
+                      <input
+                        type="text"
+                        value={editBrHours}
+                        onChange={(e) => setEditBrHours(e.target.value)}
+                        placeholder="Jam Operasional"
+                        className="rounded border border-[#D4C5AF] bg-white px-2.5 py-1.5"
+                      />
+                      <input
+                        type="text"
+                        value={editBrAddress}
+                        onChange={(e) => setEditBrAddress(e.target.value)}
+                        placeholder="Alamat Lengkap Cabang"
+                        className="rounded border border-[#D4C5AF] bg-white px-2.5 py-1.5 sm:col-span-2"
+                      />
+                      <input
+                        type="text"
+                        value={editBrPhone}
+                        onChange={(e) => setEditBrPhone(e.target.value)}
+                        placeholder="Telepon"
+                        className="rounded border border-[#D4C5AF] bg-white px-2.5 py-1.5 font-mono"
+                      />
+                      <input
+                        type="text"
+                        value={editBrWa}
+                        onChange={(e) => setEditBrWa(e.target.value)}
+                        placeholder="WhatsApp (628...)"
+                        className="rounded border border-[#D4C5AF] bg-white px-2.5 py-1.5 font-mono"
+                      />
+                      <div className="flex gap-2 sm:col-span-2">
+                        <button
+                          type="button"
+                          onClick={() => handleSaveBranchEdit(br)}
+                          className="rounded bg-[#3D4F35] px-3 py-1.5 font-semibold text-white"
+                        >
+                          Simpan Detail Cabang
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingBranchId(null)}
+                          className="rounded border border-[#D4C5AF] bg-white px-3 py-1.5"
+                        >
+                          Batal
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -1298,7 +1896,14 @@ export const AdminCenterModule: React.FC<AdminCenterModuleProps> = ({
                 placeholder="WhatsApp (628...)"
                 className="rounded border border-[#D4C5AF] bg-[#FBF8F3] px-2.5 py-2 font-mono sm:col-span-2"
               />
-              <button type="submit" className="rounded bg-[#3D4F35] px-4 py-2 font-semibold text-white sm:col-span-2">
+              <input
+                type="text"
+                value={newBrHours}
+                onChange={(e) => setNewBrHours(e.target.value)}
+                placeholder="Jam Operasional"
+                className="rounded border border-[#D4C5AF] bg-[#FBF8F3] px-2.5 py-2 sm:col-span-2"
+              />
+              <button type="submit" className="rounded bg-[#3D4F35] px-4 py-2 font-semibold text-white sm:col-span-6">
                 + Tambah Cabang
               </button>
             </form>
@@ -1310,22 +1915,66 @@ export const AdminCenterModule: React.FC<AdminCenterModuleProps> = ({
             </h2>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {data.rooms.map((rm) => (
-                <div key={rm.id} className="flex items-center justify-between rounded border border-[#E4DDD0] bg-[#FBF8F3] px-3 py-2">
-                  <div>
-                    <div className="font-semibold text-[#1F241D]">{rm.name}</div>
-                    <div className="text-[11px] text-[#5E645A]">
-                      {data.branches.find((b) => b.id === rm.branchId)?.name} · {rm.type}
+                <div key={rm.id} className="rounded border border-[#E4DDD0] bg-[#FBF8F3] px-3 py-2 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <div className="font-semibold text-[#1F241D]">{rm.name}</div>
+                      <div className="text-[11px] text-[#5E645A]">
+                        {data.branches.find((b) => b.id === rm.branchId)?.name} · {rm.type}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (editingRoomId === rm.id) {
+                            setEditingRoomId(null);
+                          } else {
+                            setEditingRoomId(rm.id);
+                            setEditRmName(rm.name);
+                            setEditRmType(rm.type);
+                          }
+                        }}
+                        className="rounded border border-[#734F2C] bg-white px-2 py-1 font-semibold text-[#5C3D21]"
+                      >
+                        {editingRoomId === rm.id ? 'Tutup' : 'Sunting'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleRoomActive(rm)}
+                        className={`rounded border px-2.5 py-1 font-semibold ${
+                          rm.active ? 'border-[#3D4F35] bg-[#3D4F35] text-white' : 'border-[#D4C5AF] bg-white'
+                        }`}
+                      >
+                        {rm.active ? 'Aktif' : 'Nonaktif'}
+                      </button>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => handleToggleRoomActive(rm)}
-                    className={`rounded border px-2.5 py-1 font-semibold ${
-                      rm.active ? 'border-[#3D4F35] bg-[#3D4F35] text-white' : 'border-[#D4C5AF] bg-white'
-                    }`}
-                  >
-                    {rm.active ? 'Aktif' : 'Nonaktif'}
-                  </button>
+                  {editingRoomId === rm.id && (
+                    <div className="flex flex-wrap items-center gap-1.5 border-t border-[#E4DDD0] pt-2">
+                      <input
+                        type="text"
+                        value={editRmName}
+                        onChange={(e) => setEditRmName(e.target.value)}
+                        placeholder="Nama Ruangan"
+                        className="flex-1 rounded border border-[#D4C5AF] bg-white px-2 py-1"
+                      />
+                      <input
+                        type="text"
+                        value={editRmType}
+                        onChange={(e) => setEditRmType(e.target.value)}
+                        placeholder="Jenis Ruangan"
+                        className="flex-1 rounded border border-[#D4C5AF] bg-white px-2 py-1"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleSaveRoomEdit(rm)}
+                        className="rounded bg-[#3D4F35] px-2.5 py-1 font-semibold text-white"
+                      >
+                        Simpan
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -1438,6 +2087,7 @@ export const AdminCenterModule: React.FC<AdminCenterModuleProps> = ({
                     <div className="font-semibold text-[#1F241D]">{srv.name}</div>
                     <div className="font-mono text-[11px] text-[#5E645A]">
                       {srv.code} · {srv.category} · {srv.durationMinutes} mnt · {formatRupiah(srv.price)}
+                      {srv.requiresConsent ? ' · Wajib Consent' : ''}
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-1.5">
@@ -1461,9 +2111,11 @@ export const AdminCenterModule: React.FC<AdminCenterModuleProps> = ({
                       onClick={() => {
                         setEditSrvId(srv.id);
                         setEditSrvName(srv.name);
+                        setEditSrvCat(srv.category);
                         setEditSrvPrice(srv.price);
                         setEditSrvDuration(srv.durationMinutes);
                         setEditSrvDesc(srv.description);
+                        setEditSrvConsent(srv.requiresConsent);
                       }}
                       className="rounded border border-[#734F2C] px-2.5 py-1 font-semibold text-[#5C3D21]"
                     >
@@ -1472,23 +2124,39 @@ export const AdminCenterModule: React.FC<AdminCenterModuleProps> = ({
                   </div>
                 </div>
                 {editSrvId === srv.id && (
-                  <div className="grid grid-cols-1 gap-2 rounded border border-[#E4DDD0] bg-[#FBF8F3] p-3 sm:grid-cols-4">
+                  <div className="grid grid-cols-1 gap-2 rounded border border-[#E4DDD0] bg-[#FBF8F3] p-3 sm:grid-cols-5">
                     <input
                       type="text"
                       value={editSrvName}
                       onChange={(e) => setEditSrvName(e.target.value)}
+                      placeholder="Nama Layanan"
                       className="rounded border border-[#D4C5AF] bg-white px-2.5 py-1.5"
                     />
+                    <select
+                      value={editSrvCat}
+                      onChange={(e) => setEditSrvCat(e.target.value as ServiceItem['category'])}
+                      className="rounded border border-[#D4C5AF] bg-white px-2.5 py-1.5"
+                    >
+                      <option value="Konsultasi TCM">Konsultasi TCM</option>
+                      <option value="Bekam">Bekam</option>
+                      <option value="Akupunktur">Akupunktur</option>
+                      <option value="Akupresur">Akupresur</option>
+                      <option value="Moksibusi">Moksibusi</option>
+                      <option value="Konsultasi Herbal">Konsultasi Herbal</option>
+                      <option value="Pendamping Spiritual">Pendamping Spiritual</option>
+                    </select>
                     <input
                       type="number"
                       value={editSrvPrice}
                       onChange={(e) => setEditSrvPrice(Number(e.target.value))}
+                      placeholder="Tarif (Rp)"
                       className="rounded border border-[#D4C5AF] bg-white px-2.5 py-1.5 font-mono"
                     />
                     <input
                       type="number"
                       value={editSrvDuration}
                       onChange={(e) => setEditSrvDuration(Number(e.target.value))}
+                      placeholder="Durasi (menit)"
                       className="rounded border border-[#D4C5AF] bg-white px-2.5 py-1.5 font-mono"
                     />
                     <div className="flex gap-1.5">
@@ -1512,8 +2180,16 @@ export const AdminCenterModule: React.FC<AdminCenterModuleProps> = ({
                       value={editSrvDesc}
                       onChange={(e) => setEditSrvDesc(e.target.value)}
                       placeholder="Deskripsi layanan"
-                      className="rounded border border-[#D4C5AF] bg-white px-2.5 py-1.5 sm:col-span-4"
+                      className="rounded border border-[#D4C5AF] bg-white px-2.5 py-1.5 sm:col-span-3"
                     />
+                    <label className="flex items-center gap-2 rounded border border-[#D4C5AF] bg-white px-2.5 py-1.5 sm:col-span-2">
+                      <input
+                        type="checkbox"
+                        checked={editSrvConsent}
+                        onChange={(e) => setEditSrvConsent(e.target.checked)}
+                      />
+                      <span>Wajib Persetujuan Tindakan</span>
+                    </label>
                   </div>
                 )}
               </div>
@@ -1623,6 +2299,29 @@ export const AdminCenterModule: React.FC<AdminCenterModuleProps> = ({
                   className="rounded border border-[#D4C5AF] bg-white px-3 py-2 font-mono"
                 />
               </div>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <select
+                  value={IMAGE_PRESETS.some((p) => p.url === artImageUrl) ? artImageUrl : ''}
+                  onChange={(e) => {
+                    if (e.target.value) setArtImageUrl(e.target.value);
+                  }}
+                  className="rounded border border-[#D4C5AF] bg-white px-3 py-2"
+                >
+                  <option value="">-- Pilih Gambar Sampul Artikel --</option>
+                  {IMAGE_PRESETS.map((preset) => (
+                    <option key={preset.url} value={preset.url}>
+                      {preset.label}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="text"
+                  value={artImageUrl}
+                  onChange={(e) => setArtImageUrl(e.target.value)}
+                  placeholder="URL Gambar Sampul (/images/...)"
+                  className="rounded border border-[#D4C5AF] bg-white px-3 py-2 font-mono"
+                />
+              </div>
               <input
                 type="text"
                 required
@@ -1645,21 +2344,108 @@ export const AdminCenterModule: React.FC<AdminCenterModuleProps> = ({
             </form>
             <div className="divide-y divide-[#EFE8DC]">
               {data.articles.map((art) => (
-                <div key={art.id} className="flex items-start justify-between gap-3 py-3">
-                  <div>
-                    <div className="font-semibold text-[#1F241D]">{art.title}</div>
-                    <div className="text-[11px] text-[#734F2C]">
-                      {art.category} · {art.readTimeMinutes} mnt · {formatTanggal(art.publishedDate)}
+                <div key={art.id} className="py-3 space-y-2">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="font-semibold text-[#1F241D]">{art.title}</div>
+                      <div className="text-[11px] text-[#734F2C]">
+                        {art.category} · {art.readTimeMinutes} mnt · {formatTanggal(art.publishedDate)}
+                      </div>
+                      <p className="mt-1 text-[#4A5045]">{art.excerpt}</p>
                     </div>
-                    <p className="mt-1 text-[#4A5045]">{art.excerpt}</p>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (editingArtId === art.id) {
+                            setEditingArtId(null);
+                          } else {
+                            setEditingArtId(art.id);
+                            setEditArtTitle(art.title);
+                            setEditArtCat(art.category);
+                            setEditArtReadMin(art.readTimeMinutes);
+                            setEditArtImageUrl(art.imageUrl || '/images/service_herbal_apothecary_1794541318909.jpg');
+                            setEditArtExcerpt(art.excerpt);
+                            setEditArtContent(art.content);
+                          }
+                        }}
+                        className="rounded border border-[#734F2C] px-2 py-1 font-semibold text-[#5C3D21]"
+                      >
+                        {editingArtId === art.id ? 'Tutup' : 'Sunting'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteArticle(art.id)}
+                        className="rounded border border-[#DC2626]/30 px-2 py-1 text-[#991B1B]"
+                      >
+                        Hapus
+                      </button>
+                    </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteArticle(art.id)}
-                    className="rounded border border-[#DC2626]/30 px-2 py-1 text-[#991B1B]"
-                  >
-                    Hapus
-                  </button>
+                  {editingArtId === art.id && (
+                    <div className="space-y-2 rounded border border-[#D4C5AF] bg-[#FBF8F3] p-3">
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-4">
+                        <input
+                          type="text"
+                          value={editArtTitle}
+                          onChange={(e) => setEditArtTitle(e.target.value)}
+                          placeholder="Judul Artikel"
+                          className="rounded border border-[#D4C5AF] bg-white px-2.5 py-1.5 sm:col-span-2"
+                        />
+                        <input
+                          type="text"
+                          value={editArtCat}
+                          onChange={(e) => setEditArtCat(e.target.value)}
+                          placeholder="Kategori"
+                          className="rounded border border-[#D4C5AF] bg-white px-2.5 py-1.5"
+                        />
+                        <input
+                          type="number"
+                          min={1}
+                          value={editArtReadMin}
+                          onChange={(e) => setEditArtReadMin(Number(e.target.value))}
+                          className="rounded border border-[#D4C5AF] bg-white px-2.5 py-1.5 font-mono"
+                        />
+                      </div>
+                      <input
+                        type="text"
+                        value={editArtImageUrl}
+                        onChange={(e) => setEditArtImageUrl(e.target.value)}
+                        placeholder="URL Gambar Sampul (/images/...)"
+                        className="w-full rounded border border-[#D4C5AF] bg-white px-2.5 py-1.5 font-mono"
+                      />
+                      <input
+                        type="text"
+                        value={editArtExcerpt}
+                        onChange={(e) => setEditArtExcerpt(e.target.value)}
+                        placeholder="Ringkasan"
+                        className="w-full rounded border border-[#D4C5AF] bg-white px-2.5 py-1.5"
+                      />
+                      <textarea
+                        rows={3}
+                        value={editArtContent}
+                        onChange={(e) => setEditArtContent(e.target.value)}
+                        placeholder="Isi Artikel"
+                        className="w-full rounded border border-[#D4C5AF] bg-white p-2.5"
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleSaveArticleEdit(art.id)}
+                          className="rounded bg-[#3D4F35] px-3 py-1.5 font-semibold text-white"
+                        >
+                          Simpan Artikel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingArtId(null)}
+                          className="rounded border border-[#D4C5AF] bg-white px-3 py-1.5"
+                        >
+                          Batal
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -1693,18 +2479,71 @@ export const AdminCenterModule: React.FC<AdminCenterModuleProps> = ({
             </form>
             <div className="divide-y divide-[#EFE8DC]">
               {data.faqs.map((fq) => (
-                <div key={fq.id} className="flex items-start justify-between gap-3 py-3">
-                  <div>
-                    <div className="font-semibold text-[#1F241D]">{fq.question}</div>
-                    <div className="mt-0.5 text-[#4A5045]">{fq.answer}</div>
+                <div key={fq.id} className="py-3 space-y-2">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="font-semibold text-[#1F241D]">{fq.question}</div>
+                      <div className="mt-0.5 text-[#4A5045]">{fq.answer}</div>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (editingFaqId === fq.id) {
+                            setEditingFaqId(null);
+                          } else {
+                            setEditingFaqId(fq.id);
+                            setEditFaqQuestion(fq.question);
+                            setEditFaqAnswer(fq.answer);
+                          }
+                        }}
+                        className="rounded border border-[#734F2C] px-2 py-1 font-semibold text-[#5C3D21]"
+                      >
+                        {editingFaqId === fq.id ? 'Tutup' : 'Sunting'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteFaq(fq.id)}
+                        className="rounded border border-[#DC2626]/30 px-2 py-1 text-[#991B1B]"
+                      >
+                        Hapus
+                      </button>
+                    </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteFaq(fq.id)}
-                    className="rounded border border-[#DC2626]/30 px-2 py-1 text-[#991B1B]"
-                  >
-                    Hapus
-                  </button>
+                  {editingFaqId === fq.id && (
+                    <div className="space-y-2 rounded border border-[#D4C5AF] bg-[#FBF8F3] p-3">
+                      <input
+                        type="text"
+                        value={editFaqQuestion}
+                        onChange={(e) => setEditFaqQuestion(e.target.value)}
+                        placeholder="Pertanyaan"
+                        className="w-full rounded border border-[#D4C5AF] bg-white px-2.5 py-1.5"
+                      />
+                      <textarea
+                        rows={2}
+                        value={editFaqAnswer}
+                        onChange={(e) => setEditFaqAnswer(e.target.value)}
+                        placeholder="Jawaban"
+                        className="w-full rounded border border-[#D4C5AF] bg-white p-2.5"
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleSaveFaqEdit(fq.id)}
+                          className="rounded bg-[#734F2C] px-3 py-1.5 font-semibold text-white"
+                        >
+                          Simpan FAQ
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingFaqId(null)}
+                          className="rounded border border-[#D4C5AF] bg-white px-3 py-1.5"
+                        >
+                          Batal
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

@@ -78,11 +78,58 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
   const [mutTargetBranch, setMutTargetBranch] = useState(branches[1]?.id || 'br-bdg');
   const [mutReason, setMutReason] = useState('');
 
+  // Edit Product & Supplier
+  const [editingProdId, setEditingProdId] = useState<string | null>(null);
+  const [editProdForm, setEditProdForm] = useState<{
+    sku: string;
+    name: string;
+    category: 'Produk Herbal' | 'Bahan Habis Pakai' | 'Perlengkapan';
+    unit: string;
+    buyPrice: number;
+    sellPrice: number;
+    minStock: number;
+    supplierId: string;
+  }>({
+    sku: '',
+    name: '',
+    category: 'Produk Herbal',
+    unit: 'botol',
+    buyPrice: 0,
+    sellPrice: 0,
+    minStock: 5,
+    supplierId: '',
+  });
+  const [editingSupId, setEditingSupId] = useState<string | null>(null);
+  const [editSupForm, setEditSupForm] = useState({
+    name: '',
+    contactName: '',
+    phone: '',
+    address: '',
+  });
+
   useEffect(() => {
     if (branches.length > 0 && !branches.some((b) => b.id === branchId)) {
       setBranchId(branches[0].id);
     }
   }, [branches]);
+
+  useEffect(() => {
+    if (suppliers.length > 0 && !suppliers.some((s) => s.id === newProdSupplierId)) {
+      setNewProdSupplierId(suppliers[0].id);
+    }
+    if (suppliers.length > 0 && !suppliers.some((s) => s.id === poSupplierId)) {
+      setPoSupplierId(suppliers[0].id);
+    }
+  }, [suppliers]);
+
+  useEffect(() => {
+    if (products.length > 0 && !products.some((p) => p.id === poProductId)) {
+      setPoProductId(products[0].id);
+    }
+    if (products.length > 0 && !products.some((p) => p.id === rcvProductId)) {
+      setRcvProductId(products[0].id);
+    }
+  }, [products]);
 
   useEffect(() => {
     setMutBatchId('');
@@ -215,6 +262,38 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
       await onRefresh();
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Gagal menambahkan pemasok.');
+    }
+  };
+
+  const handleSaveProductEdit = async (prodId: string) => {
+    setErrorMsg(null);
+    setNotice(null);
+    try {
+      await apiRequest(`/api/inventory/products/${prodId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(editProdForm),
+      });
+      setEditingProdId(null);
+      setNotice('Data & harga produk berhasil diperbarui.');
+      await onRefresh();
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Gagal memperbarui produk.');
+    }
+  };
+
+  const handleSaveSupplierEdit = async (supId: string) => {
+    setErrorMsg(null);
+    setNotice(null);
+    try {
+      await apiRequest(`/api/inventory/suppliers/${supId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(editSupForm),
+      });
+      setEditingSupId(null);
+      setNotice('Data pemasok berhasil diperbarui.');
+      await onRefresh();
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Gagal memperbarui pemasok.');
     }
   };
 
@@ -748,17 +827,141 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
             <div className="rounded-lg border border-[#E4DDD0] bg-white divide-y divide-[#EFE8DC]">
               <div className="px-4 py-3 font-semibold text-[#1F241D]">Daftar Katalog Produk ({products.length})</div>
               {products.map((p) => (
-                <div key={p.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5">
-                  <div>
-                    <div className="font-semibold text-[#1F241D]">{p.name}</div>
-                    <div className="font-mono text-[11px] text-[#5E645A]">
-                      {p.sku} · {p.category} · Min {p.minStock} {p.unit}
+                <div key={p.id} className="px-4 py-3 space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <div className="font-semibold text-[#1F241D]">{p.name}</div>
+                      <div className="font-mono text-[11px] text-[#5E645A]">
+                        {p.sku} · {p.category} · Min {p.minStock} {p.unit}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="text-right font-mono tabular-nums">
+                        <div>Beli: {formatRupiah(p.buyPrice)}</div>
+                        <div className="text-[#3D4F35]">{p.sellPrice ? `Jual: ${formatRupiah(p.sellPrice)}` : 'Bahan Tindakan'}</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (editingProdId === p.id) {
+                            setEditingProdId(null);
+                          } else {
+                            setEditingProdId(p.id);
+                            setEditProdForm({
+                              sku: p.sku,
+                              name: p.name,
+                              category: p.category,
+                              unit: p.unit,
+                              buyPrice: p.buyPrice,
+                              sellPrice: p.sellPrice,
+                              minStock: p.minStock,
+                              supplierId: p.supplierId,
+                            });
+                          }
+                        }}
+                        className="rounded border border-[#734F2C] bg-[#FBF8F3] px-2.5 py-1 font-semibold text-[#5C3D21]"
+                      >
+                        {editingProdId === p.id ? 'Tutup' : 'Sunting'}
+                      </button>
                     </div>
                   </div>
-                  <div className="text-right font-mono tabular-nums">
-                    <div>Beli: {formatRupiah(p.buyPrice)}</div>
-                    <div className="text-[#3D4F35]">{p.sellPrice ? `Jual: ${formatRupiah(p.sellPrice)}` : 'Bahan Tindakan'}</div>
-                  </div>
+                  {editingProdId === p.id && (
+                    <div className="grid grid-cols-1 gap-2 rounded border border-[#D4C5AF] bg-[#FBF8F3] p-3 sm:grid-cols-3">
+                      <input
+                        type="text"
+                        value={editProdForm.sku}
+                        onChange={(e) => setEditProdForm({ ...editProdForm, sku: e.target.value })}
+                        placeholder="SKU"
+                        className="rounded border border-[#D4C5AF] bg-white px-2 py-1 font-mono"
+                      />
+                      <input
+                        type="text"
+                        value={editProdForm.name}
+                        onChange={(e) => setEditProdForm({ ...editProdForm, name: e.target.value })}
+                        placeholder="Nama Produk"
+                        className="rounded border border-[#D4C5AF] bg-white px-2 py-1 sm:col-span-2"
+                      />
+                      <select
+                        value={editProdForm.category}
+                        onChange={(e) =>
+                          setEditProdForm({
+                            ...editProdForm,
+                            category: e.target.value as 'Produk Herbal' | 'Bahan Habis Pakai' | 'Perlengkapan',
+                          })
+                        }
+                        className="rounded border border-[#D4C5AF] bg-white px-2 py-1"
+                      >
+                        <option value="Produk Herbal">Produk Herbal</option>
+                        <option value="Bahan Habis Pakai">Bahan Habis Pakai</option>
+                        <option value="Perlengkapan">Perlengkapan</option>
+                      </select>
+                      <input
+                        type="text"
+                        value={editProdForm.unit}
+                        onChange={(e) => setEditProdForm({ ...editProdForm, unit: e.target.value })}
+                        placeholder="Satuan"
+                        className="rounded border border-[#D4C5AF] bg-white px-2 py-1"
+                      />
+                      <input
+                        type="number"
+                        min={0}
+                        value={editProdForm.minStock}
+                        onChange={(e) => setEditProdForm({ ...editProdForm, minStock: Number(e.target.value) })}
+                        placeholder="Stok Min"
+                        className="rounded border border-[#D4C5AF] bg-white px-2 py-1 font-mono"
+                      />
+                      <div>
+                        <label className="block text-[10px] text-[#5E645A]">Harga Beli</label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={editProdForm.buyPrice}
+                          onChange={(e) => setEditProdForm({ ...editProdForm, buyPrice: Number(e.target.value) })}
+                          className="w-full rounded border border-[#D4C5AF] bg-white px-2 py-1 font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] text-[#5E645A]">Harga Jual</label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={editProdForm.sellPrice}
+                          onChange={(e) => setEditProdForm({ ...editProdForm, sellPrice: Number(e.target.value) })}
+                          className="w-full rounded border border-[#D4C5AF] bg-white px-2 py-1 font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] text-[#5E645A]">Pemasok</label>
+                        <select
+                          value={editProdForm.supplierId}
+                          onChange={(e) => setEditProdForm({ ...editProdForm, supplierId: e.target.value })}
+                          className="w-full rounded border border-[#D4C5AF] bg-white px-2 py-1"
+                        >
+                          {suppliers.map((s) => (
+                            <option key={s.id} value={s.id}>
+                              {s.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex gap-2 sm:col-span-3">
+                        <button
+                          type="button"
+                          onClick={() => handleSaveProductEdit(p.id)}
+                          className="rounded bg-[#3D4F35] px-3 py-1 font-semibold text-white"
+                        >
+                          Simpan Produk
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingProdId(null)}
+                          className="rounded border border-[#D4C5AF] bg-white px-3 py-1"
+                        >
+                          Batal
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -819,12 +1022,85 @@ export const InventoryModule: React.FC<InventoryModuleProps> = ({
             <div className="rounded-lg border border-[#E4DDD0] bg-white divide-y divide-[#EFE8DC]">
               <div className="px-4 py-3 font-semibold text-[#1F241D]">Daftar Pemasok ({suppliers.length})</div>
               {suppliers.map((s) => (
-                <div key={s.id} className="px-4 py-2.5">
-                  <div className="font-semibold text-[#1F241D]">{s.name}</div>
-                  <div className="text-[#5E645A]">
-                    PIC: {s.contactName} · <span className="font-mono">{s.phone}</span>
+                <div key={s.id} className="px-4 py-3 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="font-semibold text-[#1F241D]">{s.name}</div>
+                      <div className="text-[#5E645A]">
+                        PIC: {s.contactName} · <span className="font-mono">{s.phone}</span>
+                      </div>
+                      <div className="text-[11px] text-[#5E645A]">{s.address}</div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (editingSupId === s.id) {
+                          setEditingSupId(null);
+                        } else {
+                          setEditingSupId(s.id);
+                          setEditSupForm({
+                            name: s.name,
+                            contactName: s.contactName,
+                            phone: s.phone,
+                            address: s.address,
+                          });
+                        }
+                      }}
+                      className="rounded border border-[#734F2C] bg-[#FBF8F3] px-2.5 py-1 font-semibold text-[#5C3D21]"
+                    >
+                      {editingSupId === s.id ? 'Tutup' : 'Sunting'}
+                    </button>
                   </div>
-                  <div className="text-[11px] text-[#5E645A]">{s.address}</div>
+                  {editingSupId === s.id && (
+                    <div className="space-y-2 rounded border border-[#D4C5AF] bg-[#FBF8F3] p-2.5">
+                      <input
+                        type="text"
+                        value={editSupForm.name}
+                        onChange={(e) => setEditSupForm({ ...editSupForm, name: e.target.value })}
+                        placeholder="Nama Pemasok"
+                        className="w-full rounded border border-[#D4C5AF] bg-white px-2 py-1"
+                      />
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          type="text"
+                          value={editSupForm.contactName}
+                          onChange={(e) => setEditSupForm({ ...editSupForm, contactName: e.target.value })}
+                          placeholder="Nama PIC"
+                          className="rounded border border-[#D4C5AF] bg-white px-2 py-1"
+                        />
+                        <input
+                          type="text"
+                          value={editSupForm.phone}
+                          onChange={(e) => setEditSupForm({ ...editSupForm, phone: e.target.value })}
+                          placeholder="Telepon"
+                          className="rounded border border-[#D4C5AF] bg-white px-2 py-1 font-mono"
+                        />
+                      </div>
+                      <input
+                        type="text"
+                        value={editSupForm.address}
+                        onChange={(e) => setEditSupForm({ ...editSupForm, address: e.target.value })}
+                        placeholder="Alamat"
+                        className="w-full rounded border border-[#D4C5AF] bg-white px-2 py-1"
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleSaveSupplierEdit(s.id)}
+                          className="rounded bg-[#3D4F35] px-3 py-1 font-semibold text-white"
+                        >
+                          Simpan Pemasok
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingSupId(null)}
+                          className="rounded border border-[#D4C5AF] bg-white px-3 py-1"
+                        >
+                          Batal
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

@@ -136,12 +136,33 @@ export const PublicWebsite: React.FC<PublicWebsiteProps> = ({
   };
 
   useEffect(() => {
+    if (branches.length > 0 && !branches.some((b) => b.id === selectedBranchId)) {
+      setSelectedBranchId(branches[0].id);
+    }
+    if (branches.length > 0 && !branches.some((b) => b.id === bookBranchId)) {
+      setBookBranchId(branches[0].id);
+    }
+  }, [branches]);
+
+  useEffect(() => {
+    if (services.length > 0 && !services.some((s) => s.id === bookServiceId)) {
+      setBookServiceId(services[0].id);
+    }
+  }, [services]);
+
+  useEffect(() => {
+    if (practitioners.length > 0 && !practitioners.some((p) => p.id === bookPracId)) {
+      setBookPracId(practitioners[0].id);
+    }
+  }, [practitioners]);
+
+  useEffect(() => {
     fetchPublicQueue(selectedBranchId);
   }, [selectedBranchId]);
 
   useEffect(() => {
     fetchAvailability(bookBranchId, bookPracId, bookServiceId, bookDate);
-  }, [bookBranchId, bookPracId, bookServiceId, bookDate]);
+  }, [bookBranchId, bookPracId, bookServiceId, bookDate, practitioners]);
 
   const branchServicesAll = services.filter((s) => s.activeBranchIds.includes(selectedBranchId));
   const serviceCategories = ['Semua', ...Array.from(new Set(branchServicesAll.map((s) => s.category)))];

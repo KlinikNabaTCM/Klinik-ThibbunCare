@@ -202,6 +202,13 @@ export const ClinicalModule: React.FC<ClinicalModuleProps> = ({
     if (activeVisitId) loadClinical(activeVisitId);
   }, [activeVisitId, currentAccount.id]);
 
+  useEffect(() => {
+    if (matProductId && !products.some((p) => p.id === matProductId)) {
+      setMatProductId('');
+      setMatBatchId('');
+    }
+  }, [products]);
+
   const handleSaveDraft = async () => {
     if (!activeVisitId) return;
     setErrorMsg(null);
@@ -264,6 +271,11 @@ export const ClinicalModule: React.FC<ClinicalModuleProps> = ({
     if (!activeVisitId) return;
     setErrorMsg(null);
     setNotice(null);
+    if (matProductId && !matBatchId) {
+      setErrorMsg('Pilih nomor batch bahan terlebih dahulu sebelum mencatat pemakaian bahan.');
+      return;
+    }
+
     const keyToSend = useSameKey ? procIdemKey : `proc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     if (!useSameKey) setProcIdemKey(keyToSend);
 
@@ -567,9 +579,13 @@ export const ClinicalModule: React.FC<ClinicalModuleProps> = ({
         </div>
       )}
 
-      {loading || !record || !activeVisit ? (
+      {loading ? (
         <div className="rounded-lg border border-[#E4DDD0] bg-white p-8 text-center text-sm text-[#5E645A]">
           Memuat ruang kerja klinis...
+        </div>
+      ) : !record || !activeVisit ? (
+        <div className="rounded-lg border border-[#E4DDD0] bg-white p-8 text-center text-sm text-[#5E645A]">
+          Belum ada kunjungan aktif untuk ditampilkan di ruang kerja klinis. Lakukan Check-In pasien terlebih dahulu melalui menu Jadwal & Reservasi atau Check-In & Antrean.
         </div>
       ) : (
         <>

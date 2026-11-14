@@ -135,6 +135,20 @@ function hasBranchAccess(user: UserAccount, branchId?: string): boolean {
   return user.branchIds.includes(branchId);
 }
 
+function hasManageSettingsAccess(user: UserAccount): boolean {
+  if (!hasAnyRole(user, ['admin', 'pemilik'])) return false;
+  return user.roles.includes('admin') || Boolean(user.permissions.canManageSettings);
+}
+
+function normalizePublicImageUrl(raw: unknown, fallback: string): string {
+  const val = String(raw || '').trim();
+  if (!val) return fallback;
+  if (val.startsWith('/src/assets/images/')) {
+    return val.replace('/src/assets/images/', '/images/');
+  }
+  return val;
+}
+
 function canAccessClinical(user: UserAccount, branchId?: string): boolean {
   if (!user.permissions.canAccessClinicalNotes) return false;
   if (!hasAnyRole(user, ['praktisi', 'asisten', 'pemilik'])) return false;
@@ -286,7 +300,8 @@ export async function createApiApp(): Promise<express.Express> {
 
   // Public queue display — strictly NO patient name/phone/clinical details
   app.get('/api/public/queue', (req, res) => {
-    const branchId = String(req.query.branchId || db.branches[0].id);
+    const fallbackBranch = db.branches.find((b) => b.active) || db.branches[0];
+    const branchId = String(req.query.branchId || fallbackBranch?.id || '');
     const items = db.queue
       .filter((q) => q.branchId === branchId && q.status !== 'selesai')
       .map((q) => ({
@@ -300,11 +315,17 @@ export async function createApiApp(): Promise<express.Express> {
   });
 
   app.get('/api/public/availability', (req, res) => {
-    const branchId = String(req.query.branchId || db.branches[0].id);
-    const practitionerId = String(req.query.practitionerId || db.practitioners[0].id);
+    const fallbackBranch = db.branches.find((b) => b.active) || db.branches[0];
+    const branchId = String(req.query.branchId || fallbackBranch?.id || '');
+    const practitionerId = String(req.query.practitionerId || db.practitioners[0]?.id || '');
     const date = String(req.query.date || todayJakartaISO());
     const durationMinutes = Number(req.query.durationMinutes || 45);
     const roomId = req.query.roomId ? String(req.query.roomId) : undefined;
+    const branch = db.branches.find((b) => b.id === branchId);
+    if (!branch || !branch.active) {
+      res.json({ branchId, practitionerId, date, durationMinutes, slots: [] });
+      return;
+    }
     const slots = getAvailableSlots(db, {
       branchId,
       practitionerId,
@@ -336,6 +357,12 @@ export async function createApiApp(): Promise<express.Express> {
 
     if (!branchId || !practitionerId || !Array.isArray(serviceIds) || serviceIds.length === 0 || !date || !startTime) {
       res.status(400).json({ error: 'VALIDATION_ERROR', message: 'Cabang, praktisi, layanan, tanggal, dan jam wajib dipilih.' });
+      return;
+    }
+
+    const branch = db.branches.find((b) => b.id === branchId && b.active);
+    if (!branch) {
+      res.status(400).json({ error: 'INVALID_BRANCH', message: 'Cabang yang dipilih tidak aktif atau tidak ditemukan.' });
       return;
     }
 
@@ -742,11 +769,26 @@ export async function createApiApp(): Promise<express.Express> {
       gender,
       phone,
       address,
+      branchId,
       guardianName,
       guardianRelation,
       emergencyContactName,
       emergencyContactPhone,
     } = req.body ?? {};
+
+    if (branchId !== undefined && String(branchId).trim()) {
+      const nextBranchId = String(branchId).trim();
+      const branchExists = db.branches.some((b) => b.id === nextBranchId);
+      if (!branchExists) {
+        res.status(400).json({ error: 'INVALID_BRANCH', message: 'Cabang tidak ditemukan.' });
+        return;
+      }
+      if (!hasBranchAccess(user, nextBranchId)) {
+        res.status(403).json({ error: 'FORBIDDEN_BRANCH', message: 'Anda tidak memiliki akses memindahkan pasien ke cabang tersebut.' });
+        return;
+      }
+      patient.branchId = nextBranchId;
+    }
 
     if (fullName !== undefined && String(fullName).trim()) patient.fullName = String(fullName).trim();
     if (dateOfBirth !== undefined && String(dateOfBirth).trim()) patient.dateOfBirth = String(dateOfBirth).trim();
@@ -760,6 +802,15 @@ export async function createApiApp(): Promise<express.Express> {
     }
     if (emergencyContactPhone !== undefined) {
       patient.emergencyContactPhone = String(emergencyContactPhone).trim() || undefined;
+    }
+
+    // Keep linked patient portal account synced with edited patient profile
+    const linkedPortalUser = db.users.find(
+      (u) => u.linkedPatientId === patient.id && u.roles.includes('pasien')
+    );
+    if (linkedPortalUser) {
+      linkedPortalUser.name = `${patient.fullName} (Pasien · ${patient.patientNumber})`;
+      linkedPortalUser.branchIds = [patient.branchId];
     }
 
     appendAudit(db, user, {
@@ -2880,9 +2931,14 @@ export async function createApiApp(): Promise<express.Express> {
       res.status(400).json({ error: 'VALIDATION_ERROR', message: 'SKU, nama produk, dan satuan wajib diisi.' });
       return;
     }
+    const normSku = String(sku).trim().toUpperCase();
+    if (db.products.some((p) => p.sku.toUpperCase() === normSku)) {
+      res.status(409).json({ error: 'DUPLICATE_SKU', message: `SKU ${normSku} sudah terdaftar.` });
+      return;
+    }
     const prod = {
       id: `prd-${randomUUID().slice(0, 8)}`,
-      sku: String(sku).trim().toUpperCase(),
+      sku: normSku,
       name: String(name).trim(),
       category: category || 'Produk Herbal',
       unit: String(unit).trim(),
@@ -2900,6 +2956,46 @@ export async function createApiApp(): Promise<express.Express> {
       detail: `Produk baru ${prod.sku} (${prod.name}) ditambahkan.`,
     });
     res.status(201).json({ product: prod });
+  });
+
+  app.patch('/api/inventory/products/:id', requireAuth, (req: AuthedRequest, res) => {
+    const user = req.user!;
+    if (!hasAnyRole(user, ['inventaris', 'pemilik'])) {
+      res.status(403).json({ error: 'FORBIDDEN', message: 'Hanya petugas inventaris atau pemilik yang dapat memperbarui produk.' });
+      return;
+    }
+    const prod = db.products.find((p) => p.id === req.params.id);
+    if (!prod) {
+      res.status(404).json({ error: 'NOT_FOUND', message: 'Produk tidak ditemukan.' });
+      return;
+    }
+    const { sku, name, category, unit, buyPrice, sellPrice, minStock, supplierId, trackExpiry } = req.body ?? {};
+    if (sku !== undefined && String(sku).trim()) {
+      const nextSku = String(sku).trim().toUpperCase();
+      if (db.products.some((p) => p.id !== prod.id && p.sku.toUpperCase() === nextSku)) {
+        res.status(409).json({ error: 'DUPLICATE_SKU', message: `SKU ${nextSku} sudah digunakan produk lain.` });
+        return;
+      }
+      prod.sku = nextSku;
+    }
+    if (name !== undefined && String(name).trim()) prod.name = String(name).trim();
+    if (category === 'Produk Herbal' || category === 'Bahan Habis Pakai' || category === 'Perlengkapan') {
+      prod.category = category;
+    }
+    if (unit !== undefined && String(unit).trim()) prod.unit = String(unit).trim();
+    if (buyPrice !== undefined && Number.isFinite(Number(buyPrice))) prod.buyPrice = Math.max(0, Number(buyPrice));
+    if (sellPrice !== undefined && Number.isFinite(Number(sellPrice))) prod.sellPrice = Math.max(0, Number(sellPrice));
+    if (minStock !== undefined && Number.isFinite(Number(minStock))) prod.minStock = Math.max(0, Number(minStock));
+    if (supplierId !== undefined) prod.supplierId = String(supplierId).trim();
+    if (trackExpiry !== undefined) prod.trackExpiry = Boolean(trackExpiry);
+
+    appendAudit(db, user, {
+      action: 'UBAH_DATA_PRODUK',
+      objectType: 'Product',
+      objectId: prod.id,
+      detail: `Data produk ${prod.sku} (${prod.name}) diperbarui oleh ${user.name}.`,
+    });
+    res.json({ product: prod });
   });
 
   app.post('/api/inventory/suppliers', requireAuth, (req: AuthedRequest, res) => {
@@ -2921,7 +3017,39 @@ export async function createApiApp(): Promise<express.Express> {
       address: String(address || '-').trim(),
     };
     db.suppliers.push(sup);
+    appendAudit(db, user, {
+      action: 'TAMBAH_PEMASOK',
+      objectType: 'Supplier',
+      objectId: sup.id,
+      detail: `Pemasok baru ${sup.name} ditambahkan.`,
+    });
     res.status(201).json({ supplier: sup });
+  });
+
+  app.patch('/api/inventory/suppliers/:id', requireAuth, (req: AuthedRequest, res) => {
+    const user = req.user!;
+    if (!hasAnyRole(user, ['inventaris', 'pemilik'])) {
+      res.status(403).json({ error: 'FORBIDDEN', message: 'Hanya petugas inventaris atau pemilik yang dapat memperbarui pemasok.' });
+      return;
+    }
+    const sup = db.suppliers.find((s) => s.id === req.params.id);
+    if (!sup) {
+      res.status(404).json({ error: 'NOT_FOUND', message: 'Pemasok tidak ditemukan.' });
+      return;
+    }
+    const { name, contactName, phone, address } = req.body ?? {};
+    if (name !== undefined && String(name).trim()) sup.name = String(name).trim();
+    if (contactName !== undefined) sup.contactName = String(contactName).trim() || '-';
+    if (phone !== undefined && String(phone).trim()) sup.phone = String(phone).trim();
+    if (address !== undefined) sup.address = String(address).trim() || '-';
+
+    appendAudit(db, user, {
+      action: 'UBAH_DATA_PEMASOK',
+      objectType: 'Supplier',
+      objectId: sup.id,
+      detail: `Pemasok ${sup.name} diperbarui oleh ${user.name}.`,
+    });
+    res.json({ supplier: sup });
   });
 
   app.get('/api/attachments/download/:token', (req, res) => {
@@ -3235,7 +3363,7 @@ export async function createApiApp(): Promise<express.Express> {
 
   app.get('/api/settings', requireAuth, (req: AuthedRequest, res) => {
     const user = req.user!;
-    if (!hasAnyRole(user, ['admin', 'pemilik']) || (!user.permissions.canManageSettings && !user.roles.includes('admin'))) {
+    if (!hasManageSettingsAccess(user)) {
       res.status(403).json({ error: 'FORBIDDEN', message: 'Hanya admin atau pemilik berizin yang dapat membuka pengaturan.' });
       return;
     }
@@ -3252,7 +3380,7 @@ export async function createApiApp(): Promise<express.Express> {
 
   app.patch('/api/settings', requireAuth, (req: AuthedRequest, res) => {
     const user = req.user!;
-    if (!hasAnyRole(user, ['admin', 'pemilik']) || (!user.permissions.canManageSettings && !user.roles.includes('admin'))) {
+    if (!hasManageSettingsAccess(user)) {
       res.status(403).json({ error: 'FORBIDDEN', message: 'Izin pengaturan klinik diperlukan.' });
       return;
     }
@@ -3270,7 +3398,31 @@ export async function createApiApp(): Promise<express.Express> {
     }
     if (serviceUpdate && serviceUpdate.id) {
       const idx = db.services.findIndex((s) => s.id === serviceUpdate.id);
-      if (idx >= 0) db.services[idx] = { ...db.services[idx], ...serviceUpdate };
+      if (idx >= 0) {
+        const current = db.services[idx];
+        const nextCategory = serviceUpdate.category ?? current.category;
+        const nextRequiresConsent =
+          serviceUpdate.requiresConsent !== undefined ? Boolean(serviceUpdate.requiresConsent) : current.requiresConsent;
+        const nextConsentFormType = nextRequiresConsent
+          ? serviceUpdate.consentFormType && serviceUpdate.consentFormType !== 'tidak_perlu'
+            ? serviceUpdate.consentFormType
+            : current.consentFormType !== 'tidak_perlu'
+            ? current.consentFormType
+            : nextCategory === 'Pendamping Spiritual'
+            ? 'ruqyah_syariyyah'
+            : nextCategory === 'Bekam' || nextCategory === 'Akupunktur'
+            ? 'bekam_akupunktur'
+            : 'terapi_umum'
+          : 'tidak_perlu';
+        db.services[idx] = {
+          ...current,
+          ...serviceUpdate,
+          category: nextCategory,
+          requiresConsent: nextRequiresConsent,
+          consentFormType: nextConsentFormType,
+          isSpiritualCompanion: nextCategory === 'Pendamping Spiritual',
+        };
+      }
     }
     appendAudit(db, user, {
       action: 'UBAH_PENGATURAN_KLINIK',
@@ -3283,7 +3435,7 @@ export async function createApiApp(): Promise<express.Express> {
 
   app.post('/api/users', requireAuth, (req: AuthedRequest, res) => {
     const user = req.user!;
-    if (!hasAnyRole(user, ['admin', 'pemilik']) || (!user.permissions.canManageSettings && !user.roles.includes('admin'))) {
+    if (!hasManageSettingsAccess(user)) {
       res.status(403).json({ error: 'FORBIDDEN', message: 'Hanya admin atau pemilik berizin yang dapat membuat akun staf baru.' });
       return;
     }
@@ -3347,7 +3499,7 @@ export async function createApiApp(): Promise<express.Express> {
 
   app.patch('/api/users/:id/permissions', requireAuth, (req: AuthedRequest, res) => {
     const user = req.user!;
-    if (!hasAnyRole(user, ['pemilik', 'admin']) || (!user.permissions.canManageSettings && !user.roles.includes('admin'))) {
+    if (!hasManageSettingsAccess(user)) {
       res.status(403).json({ error: 'FORBIDDEN', message: 'Hanya admin/pemilik berizin yang dapat mengubah hak akses staf.' });
       return;
     }
@@ -3399,7 +3551,7 @@ export async function createApiApp(): Promise<express.Express> {
 
   app.delete('/api/users/:id', requireAuth, (req: AuthedRequest, res) => {
     const user = req.user!;
-    if (!hasAnyRole(user, ['pemilik', 'admin']) || !user.permissions.canManageSettings) {
+    if (!hasManageSettingsAccess(user)) {
       res.status(403).json({ error: 'FORBIDDEN', message: 'Izin admin/pemilik diperlukan untuk menghapus akun.' });
       return;
     }
@@ -3424,7 +3576,7 @@ export async function createApiApp(): Promise<express.Express> {
 
   app.post('/api/settings/branches', requireAuth, (req: AuthedRequest, res) => {
     const user = req.user!;
-    if (!hasAnyRole(user, ['admin', 'pemilik']) || (!user.permissions.canManageSettings && !user.roles.includes('admin'))) {
+    if (!hasManageSettingsAccess(user)) {
       res.status(403).json({ error: 'FORBIDDEN', message: 'Izin pengaturan cabang diperlukan.' });
       return;
     }
@@ -3445,12 +3597,19 @@ export async function createApiApp(): Promise<express.Express> {
     };
     db.branches.push(branch);
     user.branchIds = Array.from(new Set([...user.branchIds, branch.id]));
+    appendAudit(db, user, {
+      branchId: branch.id,
+      action: 'TAMBAH_CABANG',
+      objectType: 'Branch',
+      objectId: branch.id,
+      detail: `Cabang baru ${branch.name} (${branch.code}) ditambahkan.`,
+    });
     res.status(201).json({ branch });
   });
 
   app.post('/api/settings/services', requireAuth, (req: AuthedRequest, res) => {
     const user = req.user!;
-    if (!hasAnyRole(user, ['admin', 'pemilik']) || (!user.permissions.canManageSettings && !user.roles.includes('admin'))) {
+    if (!hasManageSettingsAccess(user)) {
       res.status(403).json({ error: 'FORBIDDEN', message: 'Izin pengaturan layanan diperlukan.' });
       return;
     }
@@ -3497,7 +3656,7 @@ export async function createApiApp(): Promise<express.Express> {
 
   app.post('/api/settings/rooms', requireAuth, (req: AuthedRequest, res) => {
     const user = req.user!;
-    if (!hasAnyRole(user, ['admin', 'pemilik']) || (!user.permissions.canManageSettings && !user.roles.includes('admin'))) {
+    if (!hasManageSettingsAccess(user)) {
       res.status(403).json({ error: 'FORBIDDEN', message: 'Izin pengaturan ruangan diperlukan.' });
       return;
     }
@@ -3514,12 +3673,19 @@ export async function createApiApp(): Promise<express.Express> {
       active: true,
     };
     db.rooms.push(room);
+    appendAudit(db, user, {
+      branchId: room.branchId,
+      action: 'TAMBAH_RUANGAN',
+      objectType: 'Room',
+      objectId: room.id,
+      detail: `Ruangan ${room.name} (${room.type}) ditambahkan.`,
+    });
     res.status(201).json({ room });
   });
 
   app.patch('/api/settings/rooms/:id', requireAuth, (req: AuthedRequest, res) => {
     const user = req.user!;
-    if (!hasAnyRole(user, ['admin', 'pemilik']) || (!user.permissions.canManageSettings && !user.roles.includes('admin'))) {
+    if (!hasManageSettingsAccess(user)) {
       res.status(403).json({ error: 'FORBIDDEN', message: 'Izin pengaturan ruangan diperlukan.' });
       return;
     }
@@ -3530,14 +3696,21 @@ export async function createApiApp(): Promise<express.Express> {
     }
     const { active, name, type } = req.body ?? {};
     if (active !== undefined) room.active = Boolean(active);
-    if (name !== undefined) room.name = String(name).trim();
-    if (type !== undefined) room.type = String(type).trim();
+    if (name !== undefined && String(name).trim()) room.name = String(name).trim();
+    if (type !== undefined && String(type).trim()) room.type = String(type).trim();
+    appendAudit(db, user, {
+      branchId: room.branchId,
+      action: 'PERBARUI_RUANGAN',
+      objectType: 'Room',
+      objectId: room.id,
+      detail: `Ruangan ${room.name} (${room.type}, aktif: ${room.active ? 'Ya' : 'Tidak'}) diperbarui.`,
+    });
     res.json({ room });
   });
 
   app.post('/api/settings/holidays', requireAuth, (req: AuthedRequest, res) => {
     const user = req.user!;
-    if (!hasAnyRole(user, ['admin', 'pemilik']) || (!user.permissions.canManageSettings && !user.roles.includes('admin'))) {
+    if (!hasManageSettingsAccess(user)) {
       res.status(403).json({ error: 'FORBIDDEN', message: 'Izin pengaturan hari libur diperlukan.' });
       return;
     }
@@ -3558,7 +3731,7 @@ export async function createApiApp(): Promise<express.Express> {
 
   app.delete('/api/settings/holidays/:id', requireAuth, (req: AuthedRequest, res) => {
     const user = req.user!;
-    if (!hasAnyRole(user, ['pemilik', 'admin']) || !user.permissions.canManageSettings) {
+    if (!hasManageSettingsAccess(user)) {
       res.status(403).json({ error: 'FORBIDDEN', message: 'Izin pengaturan hari libur diperlukan.' });
       return;
     }
@@ -3572,7 +3745,7 @@ export async function createApiApp(): Promise<express.Express> {
 
   app.get('/api/admin/overview', requireAuth, (req: AuthedRequest, res) => {
     const user = req.user!;
-    if (!hasAnyRole(user, ['admin', 'pemilik']) || !user.permissions.canManageSettings) {
+    if (!hasManageSettingsAccess(user)) {
       res.status(403).json({ error: 'FORBIDDEN', message: 'Hanya Admin atau Pemilik berizin yang dapat membuka Pusat Admin.' });
       return;
     }
@@ -3619,7 +3792,7 @@ export async function createApiApp(): Promise<express.Express> {
 
   app.patch('/api/settings/branches/:id', requireAuth, (req: AuthedRequest, res) => {
     const user = req.user!;
-    if (!hasAnyRole(user, ['admin', 'pemilik']) || !user.permissions.canManageSettings) {
+    if (!hasManageSettingsAccess(user)) {
       res.status(403).json({ error: 'FORBIDDEN', message: 'Izin pengaturan cabang diperlukan.' });
       return;
     }
@@ -3630,11 +3803,11 @@ export async function createApiApp(): Promise<express.Express> {
     }
     const { active, name, address, phone, whatsapp, operatingHours } = req.body ?? {};
     if (active !== undefined) branch.active = Boolean(active);
-    if (name !== undefined) branch.name = String(name).trim();
-    if (address !== undefined) branch.address = String(address).trim();
-    if (phone !== undefined) branch.phone = String(phone).trim();
-    if (whatsapp !== undefined) branch.whatsapp = String(whatsapp).trim();
-    if (operatingHours !== undefined) branch.operatingHours = String(operatingHours).trim();
+    if (name !== undefined && String(name).trim()) branch.name = String(name).trim();
+    if (address !== undefined && String(address).trim()) branch.address = String(address).trim();
+    if (phone !== undefined) branch.phone = String(phone).trim() || '-';
+    if (whatsapp !== undefined) branch.whatsapp = String(whatsapp).trim() || db.settings.primaryWhatsapp;
+    if (operatingHours !== undefined && String(operatingHours).trim()) branch.operatingHours = String(operatingHours).trim();
     appendAudit(db, user, {
       branchId: branch.id,
       action: 'PERBARUI_CABANG',
@@ -3648,7 +3821,7 @@ export async function createApiApp(): Promise<express.Express> {
   // Praktisi & Jadwal Praktik Mingguan
   app.post('/api/admin/practitioners', requireAuth, (req: AuthedRequest, res) => {
     const user = req.user!;
-    if (!hasAnyRole(user, ['admin', 'pemilik']) || !user.permissions.canManageSettings) {
+    if (!hasManageSettingsAccess(user)) {
       res.status(403).json({ error: 'FORBIDDEN', message: 'Izin admin diperlukan untuk menambah praktisi.' });
       return;
     }
@@ -3673,7 +3846,7 @@ export async function createApiApp(): Promise<express.Express> {
       title: String(title).trim(),
       specialty: String(specialty || 'Terapi Holistik & Konsultasi').trim(),
       bio: String(bio || 'Praktisi berpengalaman di klinik ThibbunCare.').trim(),
-      photoUrl: String(photoUrl || '/images/practitioner_tcm_female_1794541320309.jpg'),
+      photoUrl: normalizePublicImageUrl(photoUrl, '/images/practitioner_tcm_female_1794541320309.jpg'),
       branchIds: assignedBranches,
       serviceIds: Array.isArray(serviceIds) && serviceIds.length > 0 ? serviceIds : db.services.map((s) => s.id),
       schedules: defaultSchedules,
@@ -3690,7 +3863,7 @@ export async function createApiApp(): Promise<express.Express> {
 
   app.patch('/api/admin/practitioners/:id', requireAuth, (req: AuthedRequest, res) => {
     const user = req.user!;
-    if (!hasAnyRole(user, ['admin', 'pemilik']) || !user.permissions.canManageSettings) {
+    if (!hasManageSettingsAccess(user)) {
       res.status(403).json({ error: 'FORBIDDEN', message: 'Izin admin diperlukan untuk memperbarui data praktisi.' });
       return;
     }
@@ -3699,14 +3872,24 @@ export async function createApiApp(): Promise<express.Express> {
       res.status(404).json({ error: 'NOT_FOUND', message: 'Praktisi tidak ditemukan.' });
       return;
     }
-    const { name, title, specialty, bio, branchIds, serviceIds, schedules } = req.body ?? {};
+    const { name, title, specialty, bio, photoUrl, branchIds, serviceIds, schedules } = req.body ?? {};
     if (name !== undefined && String(name).trim()) prac.name = String(name).trim();
     if (title !== undefined && String(title).trim()) prac.title = String(title).trim();
     if (specialty !== undefined) prac.specialty = String(specialty).trim();
     if (bio !== undefined) prac.bio = String(bio).trim();
+    if (photoUrl !== undefined) {
+      prac.photoUrl = normalizePublicImageUrl(photoUrl, prac.photoUrl || '/images/practitioner_tcm_female_1794541320309.jpg');
+    }
     if (Array.isArray(branchIds) && branchIds.length > 0) prac.branchIds = branchIds;
     if (Array.isArray(serviceIds) && serviceIds.length > 0) prac.serviceIds = serviceIds;
-    if (Array.isArray(schedules)) prac.schedules = schedules;
+    if (Array.isArray(schedules)) {
+      prac.schedules = schedules.map((sch: any) => ({
+        dayOfWeek: Math.max(0, Math.min(6, Number(sch.dayOfWeek) || 0)),
+        startTime: String(sch.startTime || '09:00'),
+        endTime: String(sch.endTime || '17:00'),
+        branchId: String(sch.branchId || prac.branchIds[0] || db.branches[0]?.id || 'br-jkt'),
+      }));
+    }
 
     appendAudit(db, user, {
       action: 'UBAH_DATA_PRAKTISI',
@@ -3719,22 +3902,33 @@ export async function createApiApp(): Promise<express.Express> {
 
   app.delete('/api/admin/practitioners/:id', requireAuth, (req: AuthedRequest, res) => {
     const user = req.user!;
-    if (!hasAnyRole(user, ['admin', 'pemilik']) || !user.permissions.canManageSettings) {
+    if (!hasManageSettingsAccess(user)) {
       res.status(403).json({ error: 'FORBIDDEN', message: 'Izin admin diperlukan untuk menghapus praktisi.' });
       return;
     }
+    const existing = db.practitioners.find((p) => p.id === req.params.id);
+    if (!existing) {
+      res.status(404).json({ error: 'NOT_FOUND', message: 'Praktisi tidak ditemukan.' });
+      return;
+    }
     db.practitioners = db.practitioners.filter((p) => p.id !== req.params.id);
+    appendAudit(db, user, {
+      action: 'HAPUS_PRAKTISI',
+      objectType: 'Practitioner',
+      objectId: existing.id,
+      detail: `Praktisi ${existing.name} dihapus oleh ${user.name}.`,
+    });
     res.json({ ok: true });
   });
 
   // Konten Website Publik: Artikel Edukasi & FAQ
   app.post('/api/admin/articles', requireAuth, (req: AuthedRequest, res) => {
     const user = req.user!;
-    if (!hasAnyRole(user, ['admin', 'pemilik']) || !user.permissions.canManageSettings) {
+    if (!hasManageSettingsAccess(user)) {
       res.status(403).json({ error: 'FORBIDDEN', message: 'Izin admin diperlukan untuk mengelola artikel website.' });
       return;
     }
-    const { title, category, readTimeMinutes, excerpt, content } = req.body ?? {};
+    const { title, category, readTimeMinutes, excerpt, content, imageUrl } = req.body ?? {};
     if (!title || !excerpt || !content) {
       res.status(400).json({ error: 'VALIDATION_ERROR', message: 'Judul, ringkasan, dan isi artikel wajib diisi.' });
       return;
@@ -3751,6 +3945,7 @@ export async function createApiApp(): Promise<express.Express> {
       publishedDate: todayJakartaISO(),
       excerpt: String(excerpt).trim(),
       content: String(content).trim(),
+      imageUrl: normalizePublicImageUrl(imageUrl, '/images/service_herbal_apothecary_1794541318909.jpg'),
     };
     db.articles.unshift(article);
     appendAudit(db, user, {
@@ -3764,7 +3959,7 @@ export async function createApiApp(): Promise<express.Express> {
 
   app.patch('/api/admin/articles/:id', requireAuth, (req: AuthedRequest, res) => {
     const user = req.user!;
-    if (!hasAnyRole(user, ['admin', 'pemilik']) || !user.permissions.canManageSettings) {
+    if (!hasManageSettingsAccess(user)) {
       res.status(403).json({ error: 'FORBIDDEN', message: 'Izin admin diperlukan.' });
       return;
     }
@@ -3773,28 +3968,52 @@ export async function createApiApp(): Promise<express.Express> {
       res.status(404).json({ error: 'NOT_FOUND', message: 'Artikel tidak ditemukan.' });
       return;
     }
-    const { title, category, readTimeMinutes, excerpt, content } = req.body ?? {};
-    if (title !== undefined) art.title = String(title).trim();
-    if (category !== undefined) art.category = String(category).trim();
+    const { title, category, readTimeMinutes, excerpt, content, imageUrl } = req.body ?? {};
+    if (title !== undefined && String(title).trim()) {
+      art.title = String(title).trim();
+      art.slug = art.title
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)/g, '');
+    }
+    if (category !== undefined && String(category).trim()) art.category = String(category).trim();
     if (readTimeMinutes !== undefined) art.readTimeMinutes = Math.max(1, Number(readTimeMinutes) || 4);
-    if (excerpt !== undefined) art.excerpt = String(excerpt).trim();
-    if (content !== undefined) art.content = String(content).trim();
+    if (excerpt !== undefined && String(excerpt).trim()) art.excerpt = String(excerpt).trim();
+    if (content !== undefined && String(content).trim()) art.content = String(content).trim();
+    if (imageUrl !== undefined) {
+      art.imageUrl = normalizePublicImageUrl(imageUrl, art.imageUrl || '/images/service_herbal_apothecary_1794541318909.jpg');
+    }
+    appendAudit(db, user, {
+      action: 'UBAH_ARTIKEL_PUBLIK',
+      objectType: 'EducationalArticle',
+      objectId: art.id,
+      detail: `Artikel "${art.title}" diperbarui oleh ${user.name}.`,
+    });
     res.json({ article: art });
   });
 
   app.delete('/api/admin/articles/:id', requireAuth, (req: AuthedRequest, res) => {
     const user = req.user!;
-    if (!hasAnyRole(user, ['admin', 'pemilik']) || !user.permissions.canManageSettings) {
+    if (!hasManageSettingsAccess(user)) {
       res.status(403).json({ error: 'FORBIDDEN', message: 'Izin admin diperlukan.' });
       return;
     }
+    const existing = db.articles.find((a) => a.id === req.params.id);
     db.articles = db.articles.filter((a) => a.id !== req.params.id);
+    if (existing) {
+      appendAudit(db, user, {
+        action: 'HAPUS_ARTIKEL_PUBLIK',
+        objectType: 'EducationalArticle',
+        objectId: existing.id,
+        detail: `Artikel "${existing.title}" dihapus oleh ${user.name}.`,
+      });
+    }
     res.json({ ok: true });
   });
 
   app.post('/api/admin/faqs', requireAuth, (req: AuthedRequest, res) => {
     const user = req.user!;
-    if (!hasAnyRole(user, ['admin', 'pemilik']) || !user.permissions.canManageSettings) {
+    if (!hasManageSettingsAccess(user)) {
       res.status(403).json({ error: 'FORBIDDEN', message: 'Izin admin diperlukan untuk mengelola FAQ.' });
       return;
     }
@@ -3809,12 +4028,18 @@ export async function createApiApp(): Promise<express.Express> {
       answer: String(answer).trim(),
     };
     db.faqs.push(faq);
+    appendAudit(db, user, {
+      action: 'TAMBAH_FAQ_PUBLIK',
+      objectType: 'FaqItem',
+      objectId: faq.id,
+      detail: `FAQ "${faq.question}" ditambahkan.`,
+    });
     res.status(201).json({ faq });
   });
 
   app.patch('/api/admin/faqs/:id', requireAuth, (req: AuthedRequest, res) => {
     const user = req.user!;
-    if (!hasAnyRole(user, ['admin', 'pemilik']) || !user.permissions.canManageSettings) {
+    if (!hasManageSettingsAccess(user)) {
       res.status(403).json({ error: 'FORBIDDEN', message: 'Izin admin diperlukan.' });
       return;
     }
@@ -3824,18 +4049,33 @@ export async function createApiApp(): Promise<express.Express> {
       return;
     }
     const { question, answer } = req.body ?? {};
-    if (question !== undefined) faq.question = String(question).trim();
-    if (answer !== undefined) faq.answer = String(answer).trim();
+    if (question !== undefined && String(question).trim()) faq.question = String(question).trim();
+    if (answer !== undefined && String(answer).trim()) faq.answer = String(answer).trim();
+    appendAudit(db, user, {
+      action: 'UBAH_FAQ_PUBLIK',
+      objectType: 'FaqItem',
+      objectId: faq.id,
+      detail: `FAQ "${faq.question}" diperbarui oleh ${user.name}.`,
+    });
     res.json({ faq });
   });
 
   app.delete('/api/admin/faqs/:id', requireAuth, (req: AuthedRequest, res) => {
     const user = req.user!;
-    if (!hasAnyRole(user, ['admin', 'pemilik']) || !user.permissions.canManageSettings) {
+    if (!hasManageSettingsAccess(user)) {
       res.status(403).json({ error: 'FORBIDDEN', message: 'Izin admin diperlukan.' });
       return;
     }
+    const existing = db.faqs.find((f) => f.id === req.params.id);
     db.faqs = db.faqs.filter((f) => f.id !== req.params.id);
+    if (existing) {
+      appendAudit(db, user, {
+        action: 'HAPUS_FAQ_PUBLIK',
+        objectType: 'FaqItem',
+        objectId: existing.id,
+        detail: `FAQ "${existing.question}" dihapus oleh ${user.name}.`,
+      });
+    }
     res.json({ ok: true });
   });
 

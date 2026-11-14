@@ -149,8 +149,26 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({
   };
 
   useEffect(() => {
+    if (branches.length > 0 && !branches.some((b) => b.id === reqBranchId)) {
+      setReqBranchId(branches[0].id);
+    }
+  }, [branches]);
+
+  useEffect(() => {
+    if (services.length > 0 && !services.some((s) => s.id === reqServiceId)) {
+      setReqServiceId(services[0].id);
+    }
+  }, [services]);
+
+  useEffect(() => {
+    if (practitioners.length > 0 && !practitioners.some((p) => p.id === reqPracId)) {
+      setReqPracId(practitioners[0].id);
+    }
+  }, [practitioners]);
+
+  useEffect(() => {
     fetchReqAvailability();
-  }, [reqBranchId, reqPracId, reqServiceId, reqDate]);
+  }, [reqBranchId, reqPracId, reqServiceId, reqDate, practitioners]);
 
   const handleReqBranchChange = (nextBranch: string) => {
     setReqBranchId(nextBranch);

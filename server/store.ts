@@ -63,14 +63,14 @@ export interface ClinicDatabase {
 }
 
 function addDaysISO(baseIso: string, deltaDays: number): string {
-  const dt = new Date(`${baseIso}T00:00:00+07:00`);
-  dt.setDate(dt.getDate() + deltaDays);
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Jakarta',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(dt);
+  const dt = new Date(`${baseIso}T12:00:00Z`);
+  dt.setUTCDate(dt.getUTCDate() + deltaDays);
+  return dt.toISOString().slice(0, 10);
+}
+
+function getJakartaDayOfWeek(dateIso: string): number {
+  const dt = new Date(`${dateIso}T12:00:00Z`);
+  return Number.isNaN(dt.getTime()) ? new Date().getUTCDay() : dt.getUTCDay();
 }
 
 export function createSeedDatabase(): ClinicDatabase {
@@ -1101,8 +1101,7 @@ export function checkSlotConflict(
     return { hasConflict: true, reason: 'Waktu selesai harus lebih besar dari waktu mulai.' };
   }
 
-  const dt = new Date(`${params.date}T00:00:00+07:00`);
-  const dayOfWeek = dt.getDay();
+  const dayOfWeek = getJakartaDayOfWeek(params.date);
   const prac = db.practitioners.find((p) => p.id === params.practitionerId);
   if (!prac) return { hasConflict: true, reason: 'Praktisi tidak ditemukan.' };
 
@@ -1166,8 +1165,7 @@ export function getAvailableSlots(
     excludeReservationId?: string;
   }
 ): Array<{ startTime: string; endTime: string; available: boolean; conflictReason?: string }> {
-  const dt = new Date(`${params.date}T00:00:00+07:00`);
-  const dayOfWeek = dt.getDay();
+  const dayOfWeek = getJakartaDayOfWeek(params.date);
   const prac = db.practitioners.find((p) => p.id === params.practitionerId);
   if (!prac) return [];
   const sched = prac.schedules.find(

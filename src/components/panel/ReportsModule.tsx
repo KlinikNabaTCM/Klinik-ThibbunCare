@@ -73,7 +73,7 @@ export const ReportsModule: React.FC<ReportsModuleProps> = ({
       setErrorMsg(err instanceof Error ? err.message : 'Gagal memuat laporan.');
     }
 
-    if (currentAccount.roles.includes('pemilik')) {
+    if (currentAccount.roles.includes('pemilik') || currentAccount.roles.includes('admin')) {
       try {
         const aud = await apiRequest<{ auditLogs: AuditLog[] }>('/api/audit-logs');
         setAuditLogs(aud.auditLogs);
