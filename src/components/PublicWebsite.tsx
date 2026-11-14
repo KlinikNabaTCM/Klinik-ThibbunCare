@@ -1,8 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
   Calendar,
-  ChevronDown,
-  ChevronUp,
   Clock,
   MapPin,
   Menu,
@@ -60,7 +58,7 @@ export const PublicWebsite: React.FC<PublicWebsiteProps> = ({
   onGoPanel,
   onOpenPortalWithUser,
 }) => {
-  const { settings, branches, services, practitioners, articles, faqs } = bootstrap;
+  const { settings, branches, services, practitioners, articles } = bootstrap;
 
   const [selectedBranchId, setSelectedBranchId] = useState<string>(branches[0]?.id || 'br-jkt');
   const [selectedCategory, setSelectedCategory] = useState<string>('Semua');
@@ -96,7 +94,6 @@ export const PublicWebsite: React.FC<PublicWebsiteProps> = ({
     endTime: string;
   } | null>(null);
 
-  const [openFaqId, setOpenFaqId] = useState<string | null>(faqs[0]?.id || null);
   const [activeArticle, setActiveArticle] = useState<EducationalArticle | null>(null);
 
   const fetchPublicQueue = async (branchId: string) => {
@@ -903,39 +900,6 @@ export const PublicWebsite: React.FC<PublicWebsiteProps> = ({
                 </div>
               ))}
             </div>
-          </div>
-        </div>
-      </section>
-
-      {/* FAQ */}
-      <section className="border-b border-[#E4DDD0] bg-[#F5EFE6]/55">
-        <div className="mx-auto max-w-[900px] px-6 py-14">
-          <h2 className="font-editorial text-2xl font-semibold text-[#1F241D]">
-            Pertanyaan yang Sering Diajukan
-          </h2>
-          <div className="mt-6 divide-y divide-[#DFD5C5] rounded-lg border border-[#E4DDD0] bg-white">
-            {faqs.map((f) => {
-              const isOpen = openFaqId === f.id;
-              return (
-                <div key={f.id}>
-                  <button
-                    type="button"
-                    onClick={() => setOpenFaqId(isOpen ? null : f.id)}
-                    className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left text-sm font-semibold text-[#1F241D] hover:bg-[#FBF8F3]"
-                  >
-                    <span>{f.question}</span>
-                    {isOpen ? (
-                      <ChevronUp className="h-4 w-4 shrink-0 text-[#5E645A]" />
-                    ) : (
-                      <ChevronDown className="h-4 w-4 shrink-0 text-[#5E645A]" />
-                    )}
-                  </button>
-                  {isOpen && (
-                    <div className="px-5 pb-4 text-sm leading-relaxed text-[#4A5045]">{f.answer}</div>
-                  )}
-                </div>
-              );
-            })}
           </div>
         </div>
       </section>

@@ -8,7 +8,6 @@ import {
   CalendarOff,
   Check,
   ClipboardList,
-  HelpCircle,
   KeyRound,
   LayoutGrid,
   Package,
@@ -26,7 +25,6 @@ import type {
   Branch,
   ClinicSettings,
   EducationalArticle,
-  FaqItem,
   Holiday,
   Practitioner,
   PractitionerSchedule,
@@ -48,7 +46,6 @@ interface AdminOverviewPayload {
   services: ServiceItem[];
   practitioners: Practitioner[];
   articles: EducationalArticle[];
-  faqs: FaqItem[];
   users: UserAccount[];
   recentAudits: AuditLog[];
   summary: {
@@ -203,12 +200,6 @@ export const AdminCenterModule: React.FC<AdminCenterModuleProps> = ({
   const [editArtImageUrl, setEditArtImageUrl] = useState('');
   const [editArtExcerpt, setEditArtExcerpt] = useState('');
   const [editArtContent, setEditArtContent] = useState('');
-
-  const [faqQuestion, setFaqQuestion] = useState('');
-  const [faqAnswer, setFaqAnswer] = useState('');
-  const [editingFaqId, setEditingFaqId] = useState<string | null>(null);
-  const [editFaqQuestion, setEditFaqQuestion] = useState('');
-  const [editFaqAnswer, setEditFaqAnswer] = useState('');
 
   const loadAdminOverview = async () => {
     setErrorMsg(null);
@@ -655,49 +646,6 @@ export const AdminCenterModule: React.FC<AdminCenterModuleProps> = ({
     }
   };
 
-  const handleCreateFaq = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMsg(null);
-    try {
-      await apiRequest('/api/admin/faqs', {
-        method: 'POST',
-        body: JSON.stringify({ question: faqQuestion, answer: faqAnswer }),
-      });
-      setFaqQuestion('');
-      setFaqAnswer('');
-      await syncAfterMutation('FAQ baru ditambahkan ke Website Publik.');
-    } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'Gagal menambah FAQ.');
-    }
-  };
-
-  const handleSaveFaqEdit = async (faqId: string) => {
-    setErrorMsg(null);
-    try {
-      await apiRequest(`/api/admin/faqs/${faqId}`, {
-        method: 'PATCH',
-        body: JSON.stringify({
-          question: editFaqQuestion.trim(),
-          answer: editFaqAnswer.trim(),
-        }),
-      });
-      setEditingFaqId(null);
-      await syncAfterMutation('FAQ publik berhasil diperbarui.');
-    } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'Gagal memperbarui FAQ.');
-    }
-  };
-
-  const handleDeleteFaq = async (id: string) => {
-    setErrorMsg(null);
-    try {
-      await apiRequest(`/api/admin/faqs/${id}`, { method: 'DELETE' });
-      await syncAfterMutation('FAQ dihapus.');
-    } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'Gagal menghapus FAQ.');
-    }
-  };
-
   if (loading && !data) {
     return (
       <div className="rounded-lg border border-[#E4DDD0] bg-white p-8 text-center text-sm text-[#5E645A]">
@@ -722,7 +670,7 @@ export const AdminCenterModule: React.FC<AdminCenterModuleProps> = ({
     { id: 'praktisi', label: `Praktisi & Jadwal (${data.summary.practitionersCount})`, icon: <Stethoscope className="h-3.5 w-3.5" /> },
     { id: 'cabang', label: `Cabang & Ruang (${data.branches.length})`, icon: <Building2 className="h-3.5 w-3.5" /> },
     { id: 'layanan', label: `Layanan & Tarif (${data.services.length})`, icon: <Activity className="h-3.5 w-3.5" /> },
-    { id: 'konten', label: `Konten Website (${data.articles.length + data.faqs.length})`, icon: <BookOpen className="h-3.5 w-3.5" /> },
+    { id: 'konten', label: `Artikel Website (${data.articles.length})`, icon: <BookOpen className="h-3.5 w-3.5" /> },
   ];
 
   return (
@@ -912,7 +860,7 @@ export const AdminCenterModule: React.FC<AdminCenterModuleProps> = ({
                   onClick={() => setSubTab('konten')}
                   className="rounded border border-[#D4C5AF] bg-[#FBF8F3] p-3 text-left font-semibold hover:border-[#3D4F35]"
                 >
-                  Kelola Artikel & FAQ Publik
+                  Kelola Artikel Edukasi Publik
                 </button>
                 <button
                   type="button"
@@ -2265,7 +2213,7 @@ export const AdminCenterModule: React.FC<AdminCenterModuleProps> = ({
         </div>
       )}
 
-      {/* SUBTAB 6: KONTEN WEBSITE PUBLIK (ARTIKEL & FAQ) */}
+      {/* SUBTAB 6: KONTEN WEBSITE PUBLIK (ARTIKEL EDUKASI) */}
       {subTab === 'konten' && (
         <div className="space-y-6">
           <div className="rounded-lg border border-[#E4DDD0] bg-white p-5 space-y-4">
@@ -2439,104 +2387,6 @@ export const AdminCenterModule: React.FC<AdminCenterModuleProps> = ({
                         <button
                           type="button"
                           onClick={() => setEditingArtId(null)}
-                          className="rounded border border-[#D4C5AF] bg-white px-3 py-1.5"
-                        >
-                          Batal
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="rounded-lg border border-[#E4DDD0] bg-white p-5 space-y-4">
-            <div className="flex items-center gap-2 font-editorial text-lg font-semibold text-[#1F241D]">
-              <HelpCircle className="h-5 w-5 text-[#734F2C]" />
-              Kelola Pertanyaan Umum (FAQ) Website Publik
-            </div>
-            <form onSubmit={handleCreateFaq} className="space-y-2 rounded border border-[#E4DDD0] bg-[#FBF8F3] p-4">
-              <input
-                type="text"
-                required
-                value={faqQuestion}
-                onChange={(e) => setFaqQuestion(e.target.value)}
-                placeholder="Pertanyaan pasien..."
-                className="w-full rounded border border-[#D4C5AF] bg-white px-3 py-2"
-              />
-              <textarea
-                rows={2}
-                required
-                value={faqAnswer}
-                onChange={(e) => setFaqAnswer(e.target.value)}
-                placeholder="Jawaban resmi klinik..."
-                className="w-full rounded border border-[#D4C5AF] bg-white p-3"
-              />
-              <button type="submit" className="rounded bg-[#734F2C] px-4 py-2 font-semibold text-white">
-                + Tambah FAQ Publik
-              </button>
-            </form>
-            <div className="divide-y divide-[#EFE8DC]">
-              {data.faqs.map((fq) => (
-                <div key={fq.id} className="py-3 space-y-2">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="font-semibold text-[#1F241D]">{fq.question}</div>
-                      <div className="mt-0.5 text-[#4A5045]">{fq.answer}</div>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (editingFaqId === fq.id) {
-                            setEditingFaqId(null);
-                          } else {
-                            setEditingFaqId(fq.id);
-                            setEditFaqQuestion(fq.question);
-                            setEditFaqAnswer(fq.answer);
-                          }
-                        }}
-                        className="rounded border border-[#734F2C] px-2 py-1 font-semibold text-[#5C3D21]"
-                      >
-                        {editingFaqId === fq.id ? 'Tutup' : 'Sunting'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteFaq(fq.id)}
-                        className="rounded border border-[#DC2626]/30 px-2 py-1 text-[#991B1B]"
-                      >
-                        Hapus
-                      </button>
-                    </div>
-                  </div>
-                  {editingFaqId === fq.id && (
-                    <div className="space-y-2 rounded border border-[#D4C5AF] bg-[#FBF8F3] p-3">
-                      <input
-                        type="text"
-                        value={editFaqQuestion}
-                        onChange={(e) => setEditFaqQuestion(e.target.value)}
-                        placeholder="Pertanyaan"
-                        className="w-full rounded border border-[#D4C5AF] bg-white px-2.5 py-1.5"
-                      />
-                      <textarea
-                        rows={2}
-                        value={editFaqAnswer}
-                        onChange={(e) => setEditFaqAnswer(e.target.value)}
-                        placeholder="Jawaban"
-                        className="w-full rounded border border-[#D4C5AF] bg-white p-2.5"
-                      />
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleSaveFaqEdit(fq.id)}
-                          className="rounded bg-[#734F2C] px-3 py-1.5 font-semibold text-white"
-                        >
-                          Simpan FAQ
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setEditingFaqId(null)}
                           className="rounded border border-[#D4C5AF] bg-white px-3 py-1.5"
                         >
                           Batal
