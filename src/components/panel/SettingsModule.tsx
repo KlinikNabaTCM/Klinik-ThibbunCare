@@ -3,6 +3,7 @@ import {
   Building2,
   CalendarOff,
   KeyRound,
+  Pencil,
   Plus,
   RotateCcw,
   Shield,
@@ -123,6 +124,33 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
   const [pwdMsg, setPwdMsg] = useState<string | null>(null);
   const [pwdErr, setPwdErr] = useState<string | null>(null);
 
+  // Saving & User Access Inline Edit state
+  const [savingClinic, setSavingClinic] = useState(false);
+  const [busyUserId, setBusyUserId] = useState<string | null>(null);
+  const [accessNotice, setAccessNotice] = useState<string | null>(null);
+  const [accessError, setAccessError] = useState<string | null>(null);
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [confirmDeleteUserId, setConfirmDeleteUserId] = useState<string | null>(null);
+  const [editUserForm, setEditUserForm] = useState<{
+    name: string;
+    email: string;
+    resetPassword: string;
+    active: boolean;
+    permissions: UserAccount['permissions'];
+  }>({
+    name: '',
+    email: '',
+    resetPassword: '',
+    active: true,
+    permissions: {
+      canAccessClinicalNotes: false,
+      canCorrectPayments: false,
+      canExportSensitive: false,
+      canManageSettings: false,
+      canManageStock: false,
+    },
+  });
+
   const loadSettings = async () => {
     setErrorMsg(null);
     try {
@@ -142,7 +170,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
       }
     } catch (err) {
       setErrorMsg(
-        err instanceof Error ? err.message : 'Hanya pemilik/manajer yang dapat mengakses pengaturan.'
+        err instanceof Error ? err.message : 'Hanya admin atau pemilik berizin yang dapat mengakses pengaturan.'
       );
     }
   };
@@ -155,20 +183,21 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
     e.preventDefault();
     setNotice(null);
     setErrorMsg(null);
+    setSavingClinic(true);
     try {
       await apiRequest('/api/settings', {
         method: 'PATCH',
         body: JSON.stringify({
           settings: {
-            clinicName,
+            clinicName: clinicName.trim() || 'ThibbunCare',
             logoInitials: logoInitials.trim().slice(0, 4).toUpperCase() || 'TC',
-            tagline,
-            primaryWhatsapp,
-            primaryEmail,
+            tagline: tagline.trim(),
+            primaryWhatsapp: primaryWhatsapp.trim(),
+            primaryEmail: primaryEmail.trim(),
             enableRoomTracking,
             enableRuqyahService,
             whatsappAutoSendEnabled,
-            retentionYears,
+            retentionYears: Math.max(1, Math.min(25, Number(retentionYears) || 5)),
           },
         }),
       });
@@ -176,6 +205,8 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
       await Promise.all([loadSettings(), onRefreshBootstrap()]);
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Gagal memperbarui pengaturan.');
+    } finally {
+      setSavingClinic(false);
     }
   };
 
@@ -314,26 +345,39 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
   };
 
   const handleToggleRoomActive = async (rm: Room) => {
-    await apiRequest(`/api/settings/rooms/${rm.id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ active: !rm.active }),
-    });
-    setNotice(`Status ruangan ${rm.name} diperbarui.`);
-    await Promise.all([loadSettings(), onRefreshBootstrap()]);
+    setNotice(null);
+    setErrorMsg(null);
+    try {
+      await apiRequest(`/api/settings/rooms/${rm.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ active: !rm.active }),
+      });
+      setNotice(`Status ruangan ${rm.name} diperbarui.`);
+      await Promise.all([loadSettings(), onRefreshBootstrap()]);
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Gagal mengubah status ruangan.');
+    }
   };
 
   const handleToggleServiceBranch = async (srv: ServiceItem, branchId: string) => {
-    const exists = srv.activeBranchIds.includes(branchId);
-    const nextBranches = exists
-      ? srv.activeBranchIds.filter((b) => b !== branchId)
-      : [...srv.activeBranchIds, branchId];
-    await apiRequest('/api/settings', {
-      method: 'PATCH',
-      body: JSON.stringify({
-        serviceUpdate: { id: srv.id, activeBranchIds: nextBranches },
-      }),
-    });
-    await Promise.all([loadSettings(), onRefreshBootstrap()]);
+    setNotice(null);
+    setErrorMsg(null);
+    try {
+      const exists = srv.activeBranchIds.includes(branchId);
+      const nextBranches = exists
+        ? srv.activeBranchIds.filter((b) => b !== branchId)
+        : [...srv.activeBranchIds, branchId];
+      await apiRequest('/api/settings', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          serviceUpdate: { id: srv.id, activeBranchIds: nextBranches },
+        }),
+      });
+      setNotice(`Aktivasi layanan ${srv.name} diperbarui.`);
+      await Promise.all([loadSettings(), onRefreshBootstrap()]);
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Gagal mengubah aktivasi cabang layanan.');
+    }
   };
 
   const handleAddHoliday = async (e: React.FormEvent) => {
@@ -354,54 +398,177 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
   };
 
   const handleDeleteHoliday = async (id: string) => {
-    await apiRequest(`/api/settings/holidays/${id}`, { method: 'DELETE' });
-    setNotice('Hari libur dihapus.');
-    await Promise.all([loadSettings(), onRefreshBootstrap()]);
+    setNotice(null);
+    setErrorMsg(null);
+    try {
+      await apiRequest(`/api/settings/holidays/${id}`, { method: 'DELETE' });
+      setNotice('Hari libur dihapus.');
+      await Promise.all([loadSettings(), onRefreshBootstrap()]);
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Gagal menghapus hari libur.');
+    }
   };
 
   const handleToggleClinicalPermission = async (targetUser: UserAccount) => {
-    await apiRequest(`/api/users/${targetUser.id}/permissions`, {
-      method: 'PATCH',
-      body: JSON.stringify({
-        permissions: { canAccessClinicalNotes: !targetUser.permissions.canAccessClinicalNotes },
-      }),
-    });
-    setNotice(`Izin akses klinis untuk ${targetUser.name} diperbarui.`);
-    await Promise.all([loadSettings(), onRefreshBootstrap()]);
+    setAccessNotice(null);
+    setAccessError(null);
+    setBusyUserId(targetUser.id);
+    try {
+      await apiRequest(`/api/users/${targetUser.id}/permissions`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          permissions: { canAccessClinicalNotes: !targetUser.permissions.canAccessClinicalNotes },
+        }),
+      });
+      const msg = `Izin akses klinis untuk ${targetUser.name} berhasil disimpan.`;
+      setAccessNotice(msg);
+      setNotice(msg);
+      await Promise.all([loadSettings(), onRefreshBootstrap()]);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Gagal memperbarui izin akses klinis.';
+      setAccessError(msg);
+      setErrorMsg(msg);
+    } finally {
+      setBusyUserId(null);
+    }
   };
 
   const handleToggleUserRole = async (targetUser: UserAccount, role: Role) => {
+    setAccessNotice(null);
+    setAccessError(null);
     const has = targetUser.roles.includes(role);
     if (has && targetUser.roles.length === 1) {
-      setErrorMsg('Setiap akun staf harus memiliki minimal satu peran aktif.');
+      const msg = 'Setiap akun staf harus memiliki minimal satu peran aktif.';
+      setAccessError(msg);
+      setErrorMsg(msg);
       return;
     }
     const nextRoles = has
       ? targetUser.roles.filter((r) => r !== role)
       : [...targetUser.roles, role];
-    await apiRequest(`/api/users/${targetUser.id}/permissions`, {
-      method: 'PATCH',
-      body: JSON.stringify({ roles: nextRoles }),
-    });
-    setNotice(`Peran akun ${targetUser.name} diperbarui.`);
-    await Promise.all([loadSettings(), onRefreshBootstrap()]);
+    setBusyUserId(targetUser.id);
+    try {
+      await apiRequest(`/api/users/${targetUser.id}/permissions`, {
+        method: 'PATCH',
+        body: JSON.stringify({ roles: nextRoles }),
+      });
+      const msg = `Peran akun ${targetUser.name} berhasil disimpan.`;
+      setAccessNotice(msg);
+      setNotice(msg);
+      await Promise.all([loadSettings(), onRefreshBootstrap()]);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Gagal memperbarui peran akun staf.';
+      setAccessError(msg);
+      setErrorMsg(msg);
+    } finally {
+      setBusyUserId(null);
+    }
   };
 
   const handleToggleUserBranch = async (targetUser: UserAccount, branchId: string) => {
+    setAccessNotice(null);
+    setAccessError(null);
     const has = targetUser.branchIds.includes(branchId);
     if (has && targetUser.branchIds.length === 1) {
-      setErrorMsg('Setiap akun staf harus memiliki minimal satu cabang.');
+      const msg = 'Setiap akun staf harus memiliki minimal satu cabang.';
+      setAccessError(msg);
+      setErrorMsg(msg);
       return;
     }
     const nextBranches = has
       ? targetUser.branchIds.filter((b) => b !== branchId)
       : [...targetUser.branchIds, branchId];
-    await apiRequest(`/api/users/${targetUser.id}/permissions`, {
-      method: 'PATCH',
-      body: JSON.stringify({ branchIds: nextBranches }),
+    setBusyUserId(targetUser.id);
+    try {
+      await apiRequest(`/api/users/${targetUser.id}/permissions`, {
+        method: 'PATCH',
+        body: JSON.stringify({ branchIds: nextBranches }),
+      });
+      const msg = `Cakupan cabang ${targetUser.name} berhasil disimpan.`;
+      setAccessNotice(msg);
+      setNotice(msg);
+      await Promise.all([loadSettings(), onRefreshBootstrap()]);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Gagal memperbarui cakupan cabang akun staf.';
+      setAccessError(msg);
+      setErrorMsg(msg);
+    } finally {
+      setBusyUserId(null);
+    }
+  };
+
+  const handleStartEditUser = (u: UserAccount) => {
+    setAccessNotice(null);
+    setAccessError(null);
+    setEditingUserId(u.id);
+    setEditUserForm({
+      name: u.name,
+      email: u.email,
+      resetPassword: '',
+      active: u.active,
+      permissions: { ...u.permissions },
     });
-    setNotice(`Cakupan cabang ${targetUser.name} diperbarui.`);
-    await Promise.all([loadSettings(), onRefreshBootstrap()]);
+  };
+
+  const handleSaveUserEdit = async (e: React.FormEvent, targetUser: UserAccount) => {
+    e.preventDefault();
+    setAccessNotice(null);
+    setAccessError(null);
+    if (!editUserForm.name.trim() || !editUserForm.email.trim()) {
+      setAccessError('Nama dan email akun staf wajib diisi.');
+      return;
+    }
+    if (editUserForm.resetPassword && editUserForm.resetPassword.length < 6) {
+      setAccessError('Kata sandi baru minimal 6 karakter.');
+      return;
+    }
+    setBusyUserId(targetUser.id);
+    try {
+      const payload: Record<string, unknown> = {
+        name: editUserForm.name.trim(),
+        email: editUserForm.email.trim(),
+        active: editUserForm.active,
+        permissions: editUserForm.permissions,
+      };
+      if (editUserForm.resetPassword) {
+        payload.resetPassword = editUserForm.resetPassword;
+      }
+      await apiRequest(`/api/users/${targetUser.id}/permissions`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      });
+      setEditingUserId(null);
+      const msg = `Perubahan profil & hak akses ${editUserForm.name.trim()} berhasil disimpan.`;
+      setAccessNotice(msg);
+      setNotice(msg);
+      await Promise.all([loadSettings(), onRefreshBootstrap()]);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Gagal menyimpan perubahan akun staf.';
+      setAccessError(msg);
+      setErrorMsg(msg);
+    } finally {
+      setBusyUserId(null);
+    }
+  };
+
+  const handleDeleteUser = async (userId: string, userName: string) => {
+    setAccessNotice(null);
+    setAccessError(null);
+    setBusyUserId(userId);
+    try {
+      await apiRequest(`/api/users/${userId}`, { method: 'DELETE' });
+      setConfirmDeleteUserId(null);
+      const msg = `Akun staf ${userName} berhasil dihapus.`;
+      setAccessNotice(msg);
+      setNotice(msg);
+      await Promise.all([loadSettings(), onRefreshBootstrap()]);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Gagal menghapus akun staf.';
+      setAccessError(msg);
+      setErrorMsg(msg);
+    } finally {
+      setBusyUserId(null);
+    }
   };
 
   const handleResetDemo = async () => {
@@ -653,9 +820,16 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                 </span>
               </label>
             </div>
-            <button type="submit" className="rounded bg-[#3D4F35] px-4 py-2 font-semibold text-white">
-              Simpan Pengaturan Klinik
-            </button>
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="submit"
+                disabled={savingClinic}
+                className="rounded bg-[#3D4F35] px-4 py-2 font-semibold text-white hover:bg-[#2F3E29] disabled:opacity-60"
+              >
+                {savingClinic ? 'Menyimpan...' : 'Simpan Pengaturan Klinik'}
+              </button>
+              {notice && <span className="font-medium text-[#2F3E29]">{notice}</span>}
+            </div>
           </form>
 
           {/* Manajemen Cabang */}
@@ -1111,81 +1285,300 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
             </div>
           </div>
 
-          {/* User Roles, Branch Scope & Clinical Notes Permission */}
-          <div className="rounded-lg border border-[#E4DDD0] bg-white p-5">
+          {/* User Roles, Branch Scope & Granular Permissions */}
+          <div className="rounded-lg border border-[#E4DDD0] bg-white p-5 space-y-3">
             <div className="flex items-center gap-2 font-editorial text-lg font-semibold text-[#1F241D]">
               <Shield className="h-5 w-5 text-[#3D4F35]" />
-              Akun Staf, Multi-Peran, Cakupan Cabang & Izin Catatan Klinis
+              Akun Staf, Multi-Peran, Cakupan Cabang & Izin Akses
             </div>
-            <p className="mt-1 text-[#5E645A]">
-              Mendukung beberapa peran per akun dan pembatasan cabang. Izin membuka catatan klinis bersifat terpisah, termasuk untuk Pemilik Klinik.
+            <p className="text-[#5E645A]">
+              Klik peran/cabang untuk mengaktifkan langsung, atau klik <strong>Sunting Akun &amp; Izin</strong> untuk mengedit nama, email, kata sandi, status aktif, serta 5 izin akses terperinci.
             </p>
-            <div className="mt-3 divide-y divide-[#EFE8DC]">
+            {accessError && (
+              <div className="rounded bg-[#FEF2F2] p-2.5 font-medium text-[#991B1B]">{accessError}</div>
+            )}
+            {accessNotice && (
+              <div className="rounded bg-[#F4F6F1] p-2.5 font-medium text-[#243020]">{accessNotice}</div>
+            )}
+            <div className="divide-y divide-[#EFE8DC]">
               {data.users
                 .filter((u) => !u.roles.includes('pasien'))
-                .map((u) => (
-                  <div key={u.id} className="py-3 space-y-2">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div>
-                        <div className="font-semibold text-[#1F241D]">{u.name}</div>
-                        <div className="font-mono text-[11px] text-[#5E645A]">{u.email}</div>
+                .map((u) => {
+                  const isBusy = busyUserId === u.id;
+                  const isEditing = editingUserId === u.id;
+                  return (
+                    <div key={u.id} className="py-3.5 space-y-2.5">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <div className="font-semibold text-[#1F241D]">
+                            {u.name}
+                            {!u.active && (
+                              <span className="ml-2 rounded bg-[#FEF2F2] px-1.5 py-0.5 text-[10px] font-semibold text-[#991B1B]">
+                                NONAKTIF
+                              </span>
+                            )}
+                          </div>
+                          <div className="font-mono text-[11px] text-[#5E645A]">{u.email}</div>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <button
+                            type="button"
+                            disabled={isBusy}
+                            onClick={() => handleToggleClinicalPermission(u)}
+                            className={`rounded border px-3 py-1 font-semibold disabled:opacity-50 ${
+                              u.permissions.canAccessClinicalNotes
+                                ? 'border-[#3D4F35] bg-[#F4F6F1] text-[#2F3E29]'
+                                : 'border-[#D4C5AF] bg-[#FBF8F3] text-[#5E645A]'
+                            }`}
+                          >
+                            Catatan Klinis: {u.permissions.canAccessClinicalNotes ? 'Diizinkan' : 'Ditolak'}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isBusy}
+                            onClick={() => (isEditing ? setEditingUserId(null) : handleStartEditUser(u))}
+                            className="inline-flex items-center gap-1 rounded border border-[#734F2C] bg-[#FBF8F3] px-2.5 py-1 font-semibold text-[#5C3D21] hover:bg-[#EFE6D8]"
+                          >
+                            <Pencil className="h-3 w-3" />
+                            {isEditing ? 'Tutup Sunting' : 'Sunting Akun & Izin'}
+                          </button>
+                          {u.id !== currentAccount.id &&
+                            (confirmDeleteUserId === u.id ? (
+                              <div className="inline-flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  disabled={isBusy}
+                                  onClick={() => handleDeleteUser(u.id, u.name)}
+                                  className="rounded bg-[#991B1B] px-2.5 py-1 font-semibold text-white"
+                                >
+                                  Konfirmasi Hapus
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setConfirmDeleteUserId(null)}
+                                  className="rounded border border-[#D4C5AF] px-2 py-1"
+                                >
+                                  Batal
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled={isBusy}
+                                onClick={() => setConfirmDeleteUserId(u.id)}
+                                title="Hapus akun staf"
+                                className="rounded border border-[#DC2626]/30 px-2 py-1 text-[#991B1B] hover:bg-[#FEF2F2]"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            ))}
+                        </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => handleToggleClinicalPermission(u)}
-                        className={`rounded border px-3 py-1 font-semibold ${
-                          u.permissions.canAccessClinicalNotes
-                            ? 'border-[#3D4F35] bg-[#F4F6F1] text-[#2F3E29]'
-                            : 'border-[#D4C5AF] bg-[#FBF8F3] text-[#5E645A]'
-                        }`}
-                      >
-                        Akses Catatan Klinis: {u.permissions.canAccessClinicalNotes ? 'Diizinkan' : 'Ditolak'}
-                      </button>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-4 text-[11px] text-[#4A5045]">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="font-semibold">Peran:</span>
-                        {STAFF_ROLES.map((sr) => {
-                          const active = u.roles.includes(sr.role);
-                          return (
+
+                      {isEditing && (
+                        <form
+                          onSubmit={(e) => handleSaveUserEdit(e, u)}
+                          className="rounded-md border border-[#D4C5AF] bg-[#FBF8F3] p-3.5 space-y-3"
+                        >
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                            <div>
+                              <label className="block font-semibold text-[#4A5045]">Nama Lengkap & Jabatan</label>
+                              <input
+                                type="text"
+                                required
+                                value={editUserForm.name}
+                                onChange={(e) => setEditUserForm({ ...editUserForm, name: e.target.value })}
+                                className="mt-1 w-full rounded border border-[#D4C5AF] bg-white px-2.5 py-1.5"
+                              />
+                            </div>
+                            <div>
+                              <label className="block font-semibold text-[#4A5045]">Email Login</label>
+                              <input
+                                type="email"
+                                required
+                                value={editUserForm.email}
+                                onChange={(e) => setEditUserForm({ ...editUserForm, email: e.target.value })}
+                                className="mt-1 w-full rounded border border-[#D4C5AF] bg-white px-2.5 py-1.5"
+                              />
+                            </div>
+                            <div>
+                              <label className="block font-semibold text-[#4A5045]">
+                                Kata Sandi Baru (Opsional)
+                              </label>
+                              <input
+                                type="password"
+                                minLength={6}
+                                value={editUserForm.resetPassword}
+                                onChange={(e) =>
+                                  setEditUserForm({ ...editUserForm, resetPassword: e.target.value })
+                                }
+                                placeholder="Kosongkan jika tetap"
+                                className="mt-1 w-full rounded border border-[#D4C5AF] bg-white px-2.5 py-1.5"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 text-[11px]">
+                            <label className="flex items-center gap-1.5 font-medium">
+                              <input
+                                type="checkbox"
+                                checked={editUserForm.permissions.canManageSettings}
+                                onChange={(e) =>
+                                  setEditUserForm({
+                                    ...editUserForm,
+                                    permissions: {
+                                      ...editUserForm.permissions,
+                                      canManageSettings: e.target.checked,
+                                    },
+                                  })
+                                }
+                              />
+                              <span>Kelola Pengaturan &amp; Akses</span>
+                            </label>
+                            <label className="flex items-center gap-1.5 font-medium">
+                              <input
+                                type="checkbox"
+                                checked={editUserForm.permissions.canAccessClinicalNotes}
+                                onChange={(e) =>
+                                  setEditUserForm({
+                                    ...editUserForm,
+                                    permissions: {
+                                      ...editUserForm.permissions,
+                                      canAccessClinicalNotes: e.target.checked,
+                                    },
+                                  })
+                                }
+                              />
+                              <span>Akses Catatan Klinis</span>
+                            </label>
+                            <label className="flex items-center gap-1.5 font-medium">
+                              <input
+                                type="checkbox"
+                                checked={editUserForm.permissions.canCorrectPayments}
+                                onChange={(e) =>
+                                  setEditUserForm({
+                                    ...editUserForm,
+                                    permissions: {
+                                      ...editUserForm.permissions,
+                                      canCorrectPayments: e.target.checked,
+                                    },
+                                  })
+                                }
+                              />
+                              <span>Koreksi Pembayaran / Refund</span>
+                            </label>
+                            <label className="flex items-center gap-1.5 font-medium">
+                              <input
+                                type="checkbox"
+                                checked={editUserForm.permissions.canManageStock}
+                                onChange={(e) =>
+                                  setEditUserForm({
+                                    ...editUserForm,
+                                    permissions: {
+                                      ...editUserForm.permissions,
+                                      canManageStock: e.target.checked,
+                                    },
+                                  })
+                                }
+                              />
+                              <span>Kelola Stok &amp; Pembelian</span>
+                            </label>
+                            <label className="flex items-center gap-1.5 font-medium">
+                              <input
+                                type="checkbox"
+                                checked={editUserForm.permissions.canExportSensitive}
+                                onChange={(e) =>
+                                  setEditUserForm({
+                                    ...editUserForm,
+                                    permissions: {
+                                      ...editUserForm.permissions,
+                                      canExportSensitive: e.target.checked,
+                                    },
+                                  })
+                                }
+                              />
+                              <span>Ekspor Laporan Sensitif</span>
+                            </label>
+                            {u.id !== currentAccount.id && (
+                              <label className="flex items-center gap-1.5 font-semibold text-[#1F241D]">
+                                <input
+                                  type="checkbox"
+                                  checked={editUserForm.active}
+                                  onChange={(e) =>
+                                    setEditUserForm({ ...editUserForm, active: e.target.checked })
+                                  }
+                                />
+                                <span>Status Akun Aktif</span>
+                              </label>
+                            )}
+                          </div>
+
+                          <div className="flex flex-wrap gap-2">
                             <button
-                              key={sr.role}
-                              type="button"
-                              onClick={() => handleToggleUserRole(u, sr.role)}
-                              className={`rounded border px-2 py-0.5 font-medium ${
-                                active
-                                  ? 'border-[#3D4F35] bg-[#3D4F35] text-white'
-                                  : 'border-[#D4C5AF] bg-[#FBF8F3] text-[#5E645A]'
-                              }`}
+                              type="submit"
+                              disabled={isBusy}
+                              className="rounded bg-[#3D4F35] px-3.5 py-1.5 font-semibold text-white hover:bg-[#2F3E29] disabled:opacity-50"
                             >
-                              {sr.label}
+                              {isBusy ? 'Menyimpan...' : 'Simpan Perubahan Akun'}
                             </button>
-                          );
-                        })}
-                      </div>
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="font-semibold">Cabang:</span>
-                        {data.branches.map((br) => {
-                          const active = u.branchIds.includes(br.id);
-                          return (
                             <button
-                              key={br.id}
                               type="button"
-                              onClick={() => handleToggleUserBranch(u, br.id)}
-                              className={`rounded border px-2 py-0.5 font-mono font-medium ${
-                                active
-                                  ? 'border-[#734F2C] bg-[#734F2C] text-white'
-                                  : 'border-[#D4C5AF] bg-[#FBF8F3] text-[#5E645A]'
-                              }`}
+                              onClick={() => setEditingUserId(null)}
+                              className="rounded border border-[#D4C5AF] bg-white px-3 py-1.5 font-medium"
                             >
-                              {br.code}
+                              Batal
                             </button>
-                          );
-                        })}
+                          </div>
+                        </form>
+                      )}
+
+                      <div className="flex flex-wrap items-center gap-4 text-[11px] text-[#4A5045]">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="font-semibold">Peran:</span>
+                          {STAFF_ROLES.map((sr) => {
+                            const active = u.roles.includes(sr.role);
+                            return (
+                              <button
+                                key={sr.role}
+                                type="button"
+                                disabled={isBusy}
+                                onClick={() => handleToggleUserRole(u, sr.role)}
+                                className={`rounded border px-2 py-0.5 font-medium disabled:opacity-50 ${
+                                  active
+                                    ? 'border-[#3D4F35] bg-[#3D4F35] text-white'
+                                    : 'border-[#D4C5AF] bg-[#FBF8F3] text-[#5E645A]'
+                                }`}
+                              >
+                                {sr.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="font-semibold">Cabang:</span>
+                          {data.branches.map((br) => {
+                            const active = u.branchIds.includes(br.id);
+                            return (
+                              <button
+                                key={br.id}
+                                type="button"
+                                disabled={isBusy}
+                                onClick={() => handleToggleUserBranch(u, br.id)}
+                                className={`rounded border px-2 py-0.5 font-mono font-medium disabled:opacity-50 ${
+                                  active
+                                    ? 'border-[#734F2C] bg-[#734F2C] text-white'
+                                    : 'border-[#D4C5AF] bg-[#FBF8F3] text-[#5E645A]'
+                                }`}
+                              >
+                                {br.code}
+                              </button>
+                            );
+                          })}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
             </div>
 
             <form onSubmit={handleCreateStaffUser} className="mt-5 border-t border-[#EFE8DC] pt-4 space-y-3">

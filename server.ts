@@ -3235,8 +3235,8 @@ export async function createApiApp(): Promise<express.Express> {
 
   app.get('/api/settings', requireAuth, (req: AuthedRequest, res) => {
     const user = req.user!;
-    if (!hasAnyRole(user, ['pemilik'])) {
-      res.status(403).json({ error: 'FORBIDDEN', message: 'Hanya pemilik/manajer yang dapat membuka pengaturan.' });
+    if (!hasAnyRole(user, ['admin', 'pemilik']) || (!user.permissions.canManageSettings && !user.roles.includes('admin'))) {
+      res.status(403).json({ error: 'FORBIDDEN', message: 'Hanya admin atau pemilik berizin yang dapat membuka pengaturan.' });
       return;
     }
     res.json({
@@ -3252,13 +3252,17 @@ export async function createApiApp(): Promise<express.Express> {
 
   app.patch('/api/settings', requireAuth, (req: AuthedRequest, res) => {
     const user = req.user!;
-    if (!hasAnyRole(user, ['pemilik']) || !user.permissions.canManageSettings) {
+    if (!hasAnyRole(user, ['admin', 'pemilik']) || (!user.permissions.canManageSettings && !user.roles.includes('admin'))) {
       res.status(403).json({ error: 'FORBIDDEN', message: 'Izin pengaturan klinik diperlukan.' });
       return;
     }
     const { settings, branchUpdate, serviceUpdate } = req.body ?? {};
     if (settings) {
-      db.settings = { ...db.settings, ...settings };
+      db.settings = {
+        ...db.settings,
+        ...settings,
+        retentionYears: Math.max(1, Math.min(25, Number(settings.retentionYears) || db.settings.retentionYears)),
+      };
     }
     if (branchUpdate && branchUpdate.id) {
       const idx = db.branches.findIndex((b) => b.id === branchUpdate.id);
@@ -3279,8 +3283,8 @@ export async function createApiApp(): Promise<express.Express> {
 
   app.post('/api/users', requireAuth, (req: AuthedRequest, res) => {
     const user = req.user!;
-    if (!hasAnyRole(user, ['pemilik']) || !user.permissions.canManageSettings) {
-      res.status(403).json({ error: 'FORBIDDEN', message: 'Hanya pemilik berizin yang dapat membuat akun staf baru.' });
+    if (!hasAnyRole(user, ['admin', 'pemilik']) || (!user.permissions.canManageSettings && !user.roles.includes('admin'))) {
+      res.status(403).json({ error: 'FORBIDDEN', message: 'Hanya admin atau pemilik berizin yang dapat membuat akun staf baru.' });
       return;
     }
     const { name, email, password, roles, branchIds, canAccessClinicalNotes } = req.body ?? {};
@@ -3343,7 +3347,7 @@ export async function createApiApp(): Promise<express.Express> {
 
   app.patch('/api/users/:id/permissions', requireAuth, (req: AuthedRequest, res) => {
     const user = req.user!;
-    if (!hasAnyRole(user, ['pemilik', 'admin']) || !user.permissions.canManageSettings) {
+    if (!hasAnyRole(user, ['pemilik', 'admin']) || (!user.permissions.canManageSettings && !user.roles.includes('admin'))) {
       res.status(403).json({ error: 'FORBIDDEN', message: 'Hanya admin/pemilik berizin yang dapat mengubah hak akses staf.' });
       return;
     }
@@ -3420,7 +3424,7 @@ export async function createApiApp(): Promise<express.Express> {
 
   app.post('/api/settings/branches', requireAuth, (req: AuthedRequest, res) => {
     const user = req.user!;
-    if (!hasAnyRole(user, ['pemilik']) || !user.permissions.canManageSettings) {
+    if (!hasAnyRole(user, ['admin', 'pemilik']) || (!user.permissions.canManageSettings && !user.roles.includes('admin'))) {
       res.status(403).json({ error: 'FORBIDDEN', message: 'Izin pengaturan cabang diperlukan.' });
       return;
     }
@@ -3446,7 +3450,7 @@ export async function createApiApp(): Promise<express.Express> {
 
   app.post('/api/settings/services', requireAuth, (req: AuthedRequest, res) => {
     const user = req.user!;
-    if (!hasAnyRole(user, ['pemilik']) || !user.permissions.canManageSettings) {
+    if (!hasAnyRole(user, ['admin', 'pemilik']) || (!user.permissions.canManageSettings && !user.roles.includes('admin'))) {
       res.status(403).json({ error: 'FORBIDDEN', message: 'Izin pengaturan layanan diperlukan.' });
       return;
     }
@@ -3493,7 +3497,7 @@ export async function createApiApp(): Promise<express.Express> {
 
   app.post('/api/settings/rooms', requireAuth, (req: AuthedRequest, res) => {
     const user = req.user!;
-    if (!hasAnyRole(user, ['pemilik']) || !user.permissions.canManageSettings) {
+    if (!hasAnyRole(user, ['admin', 'pemilik']) || (!user.permissions.canManageSettings && !user.roles.includes('admin'))) {
       res.status(403).json({ error: 'FORBIDDEN', message: 'Izin pengaturan ruangan diperlukan.' });
       return;
     }
@@ -3515,7 +3519,7 @@ export async function createApiApp(): Promise<express.Express> {
 
   app.patch('/api/settings/rooms/:id', requireAuth, (req: AuthedRequest, res) => {
     const user = req.user!;
-    if (!hasAnyRole(user, ['pemilik']) || !user.permissions.canManageSettings) {
+    if (!hasAnyRole(user, ['admin', 'pemilik']) || (!user.permissions.canManageSettings && !user.roles.includes('admin'))) {
       res.status(403).json({ error: 'FORBIDDEN', message: 'Izin pengaturan ruangan diperlukan.' });
       return;
     }
@@ -3533,7 +3537,7 @@ export async function createApiApp(): Promise<express.Express> {
 
   app.post('/api/settings/holidays', requireAuth, (req: AuthedRequest, res) => {
     const user = req.user!;
-    if (!hasAnyRole(user, ['pemilik']) || !user.permissions.canManageSettings) {
+    if (!hasAnyRole(user, ['admin', 'pemilik']) || (!user.permissions.canManageSettings && !user.roles.includes('admin'))) {
       res.status(403).json({ error: 'FORBIDDEN', message: 'Izin pengaturan hari libur diperlukan.' });
       return;
     }
