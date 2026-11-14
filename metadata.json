@@ -1,0 +1,6 @@
+{
+  "name": "ThibbunCare",
+  "description": "Sistem operasional klinik holistik & tradisional terpadu dengan website publik, portal pasien, rekam klinis, kasir, inventaris batch, dan manajemen admin.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

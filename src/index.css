@@ -1,0 +1,65 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Fraunces", Georgia, serif;
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  --color-olive-50: #f4f6f1;
+  --color-olive-100: #e6ebe0;
+  --color-olive-200: #cdd7c2;
+  --color-olive-600: #4a5d3f;
+  --color-olive-700: #3d4f35;
+  --color-olive-800: #2f3e29;
+  --color-olive-900: #243020;
+
+  --color-cream-50: #fbf8f3;
+  --color-cream-100: #f5efe6;
+  --color-cream-200: #eae0d0;
+  --color-cream-300: #dccdb6;
+
+  --color-wood-500: #8c6239;
+  --color-wood-600: #734f2c;
+  --color-wood-700: #5c3d21;
+}
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    background-color: #fbf8f3;
+    color: #1f241d;
+    scroll-behavior: smooth;
+  }
+
+  h1, h2, h3, .font-editorial {
+    font-family: var(--font-display);
+  }
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+.text-balance {
+  text-wrap: balance;
+}
+
+/* Print optimization for kuitansi, formulir persetujuan, dan ringkasan kunjungan */
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-only {
+    display: block !important;
+  }
+  .print-sheet {
+    box-shadow: none !important;
+    border: 1px solid #d4d4d4 !important;
+    margin: 0 !important;
+    padding: 16px !important;
+  }
+}
