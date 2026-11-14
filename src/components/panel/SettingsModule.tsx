@@ -72,12 +72,18 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
   // Branch edit/add
   const [editingBranchId, setEditingBranchId] = useState<string | null>(null);
   const [editBranchForm, setEditBranchForm] = useState({
+    code: '',
     name: '',
     address: '',
     phone: '',
     whatsapp: '',
     operatingHours: '',
   });
+  const [savingBranch, setSavingBranch] = useState(false);
+  const [creatingBranch, setCreatingBranch] = useState(false);
+  const [togglingBranchId, setTogglingBranchId] = useState<string | null>(null);
+  const [branchNotice, setBranchNotice] = useState<string | null>(null);
+  const [branchError, setBranchError] = useState<string | null>(null);
   const [newBranchCode, setNewBranchCode] = useState('');
   const [newBranchName, setNewBranchName] = useState('');
   const [newBranchAddress, setNewBranchAddress] = useState('');
@@ -216,13 +222,16 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
   };
 
   const handleStartEditBranch = (br: Branch) => {
+    setBranchNotice(null);
+    setBranchError(null);
     setEditingBranchId(br.id);
     setEditBranchForm({
-      name: br.name,
-      address: br.address,
-      phone: br.phone,
-      whatsapp: br.whatsapp,
-      operatingHours: br.operatingHours,
+      code: br.code || '',
+      name: br.name || '',
+      address: br.address || '',
+      phone: br.phone || '',
+      whatsapp: br.whatsapp || '',
+      operatingHours: br.operatingHours || '',
     });
   };
 
@@ -231,18 +240,83 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
     if (!editingBranchId) return;
     setNotice(null);
     setErrorMsg(null);
+    setBranchNotice(null);
+    setBranchError(null);
+
+    const code = editBranchForm.code.trim().toUpperCase();
+    const name = editBranchForm.name.trim();
+    const address = editBranchForm.address.trim();
+    if (!code || !name || !address) {
+      const msg = 'Kode cabang, nama cabang, dan alamat lengkap wajib diisi.';
+      setBranchError(msg);
+      setErrorMsg(msg);
+      return;
+    }
+
+    setSavingBranch(true);
     try {
-      await apiRequest('/api/settings', {
+      const res = await apiRequest<{ branch: Branch }>(`/api/settings/branches/${editingBranchId}`, {
         method: 'PATCH',
         body: JSON.stringify({
-          branchUpdate: { id: editingBranchId, ...editBranchForm },
+          code,
+          name,
+          address,
+          phone: editBranchForm.phone.trim() || '-',
+          whatsapp: editBranchForm.whatsapp.trim(),
+          operatingHours: editBranchForm.operatingHours.trim() || 'Senin–Sabtu, 08:00–20:00 WIB',
         }),
       });
+      setData((prev) =>
+        prev
+          ? {
+              ...prev,
+              branches: prev.branches.map((b) => (b.id === res.branch.id ? res.branch : b)),
+            }
+          : prev
+      );
       setEditingBranchId(null);
-      setNotice('Data cabang berhasil diperbarui.');
+      const msg = `Data & alamat cabang "${res.branch.name}" berhasil disimpan.`;
+      setBranchNotice(msg);
+      setNotice(msg);
       await Promise.all([loadSettings(), onRefreshBootstrap()]);
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'Gagal memperbarui cabang.');
+      const msg = err instanceof Error ? err.message : 'Gagal memperbarui cabang.';
+      setBranchError(msg);
+      setErrorMsg(msg);
+    } finally {
+      setSavingBranch(false);
+    }
+  };
+
+  const handleToggleBranchActive = async (br: Branch) => {
+    setNotice(null);
+    setErrorMsg(null);
+    setBranchNotice(null);
+    setBranchError(null);
+    setTogglingBranchId(br.id);
+    try {
+      const res = await apiRequest<{ branch: Branch }>(`/api/settings/branches/${br.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ active: !br.active }),
+      });
+      setData((prev) =>
+        prev
+          ? {
+              ...prev,
+              branches: prev.branches.map((b) => (b.id === res.branch.id ? res.branch : b)),
+            }
+          : prev
+      );
+      const msg = `Cabang "${res.branch.name}" kini berstatus ${res.branch.active ? 'Aktif' : 'Nonaktif'}.`;
+      setBranchNotice(msg);
+      setNotice(msg);
+      await Promise.all([loadSettings(), onRefreshBootstrap()]);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Gagal mengubah status cabang.';
+      setBranchError(msg);
+      setErrorMsg(msg);
+    } finally {
+      setTogglingBranchId(null);
     }
   };
 
@@ -250,27 +324,56 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
     e.preventDefault();
     setNotice(null);
     setErrorMsg(null);
+    setBranchNotice(null);
+    setBranchError(null);
+
+    const code = newBranchCode.trim().toUpperCase();
+    const name = newBranchName.trim();
+    const address = newBranchAddress.trim();
+    if (!code || !name || !address) {
+      const msg = 'Kode cabang, nama cabang, dan alamat lengkap wajib diisi.';
+      setBranchError(msg);
+      setErrorMsg(msg);
+      return;
+    }
+
+    setCreatingBranch(true);
     try {
-      await apiRequest('/api/settings/branches', {
+      const res = await apiRequest<{ branch: Branch }>('/api/settings/branches', {
         method: 'POST',
         body: JSON.stringify({
-          code: newBranchCode,
-          name: newBranchName,
-          address: newBranchAddress,
-          phone: newBranchPhone,
-          whatsapp: newBranchWa,
-          operatingHours: newBranchHours,
+          code,
+          name,
+          address,
+          phone: newBranchPhone.trim(),
+          whatsapp: newBranchWa.trim(),
+          operatingHours: newBranchHours.trim() || 'Senin–Sabtu, 08:00–20:00 WIB',
         }),
       });
+      setData((prev) =>
+        prev
+          ? {
+              ...prev,
+              branches: [...prev.branches, res.branch],
+            }
+          : prev
+      );
       setNewBranchCode('');
       setNewBranchName('');
       setNewBranchAddress('');
       setNewBranchPhone('');
       setNewBranchWa('');
-      setNotice('Cabang klinik baru berhasil ditambahkan.');
+      setNewBranchHours('Senin–Sabtu, 08:00–20:00 WIB');
+      const msg = `Cabang baru "${res.branch.name}" (${res.branch.code}) berhasil ditambahkan.`;
+      setBranchNotice(msg);
+      setNotice(msg);
       await Promise.all([loadSettings(), onRefreshBootstrap()]);
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'Gagal menambah cabang baru.');
+      const msg = err instanceof Error ? err.message : 'Gagal menambah cabang baru.';
+      setBranchError(msg);
+      setErrorMsg(msg);
+    } finally {
+      setCreatingBranch(false);
     }
   };
 
@@ -864,58 +967,112 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
               <Building2 className="h-5 w-5 text-[#3D4F35]" />
               Daftar Cabang, Alamat & Jam Operasional
             </div>
+
+            {branchError && (
+              <div className="rounded border border-[#DC2626]/30 bg-[#FEF2F2] p-3 font-medium text-[#991B1B]">
+                {branchError}
+              </div>
+            )}
+            {branchNotice && (
+              <div className="rounded border border-[#3D4F35]/30 bg-[#F4F6F1] p-3 font-medium text-[#243020]">
+                {branchNotice}
+              </div>
+            )}
+
             <div className="divide-y divide-[#EFE8DC]">
               {data.branches.map((br) => (
                 <div key={br.id} className="py-3">
                   {editingBranchId === br.id ? (
-                    <form onSubmit={handleSaveBranchEdit} className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                      <input
-                        type="text"
-                        required
-                        value={editBranchForm.name}
-                        onChange={(e) => setEditBranchForm({ ...editBranchForm, name: e.target.value })}
-                        placeholder="Nama Cabang"
-                        className="rounded border border-[#D4C5AF] bg-[#FBF8F3] px-2.5 py-1.5"
-                      />
-                      <input
-                        type="text"
-                        required
-                        value={editBranchForm.address}
-                        onChange={(e) => setEditBranchForm({ ...editBranchForm, address: e.target.value })}
-                        placeholder="Alamat"
-                        className="rounded border border-[#D4C5AF] bg-[#FBF8F3] px-2.5 py-1.5 sm:col-span-2"
-                      />
-                      <input
-                        type="text"
-                        value={editBranchForm.phone}
-                        onChange={(e) => setEditBranchForm({ ...editBranchForm, phone: e.target.value })}
-                        placeholder="Telepon"
-                        className="rounded border border-[#D4C5AF] bg-[#FBF8F3] px-2.5 py-1.5 font-mono"
-                      />
-                      <input
-                        type="text"
-                        value={editBranchForm.whatsapp}
-                        onChange={(e) => setEditBranchForm({ ...editBranchForm, whatsapp: e.target.value })}
-                        placeholder="WhatsApp"
-                        className="rounded border border-[#D4C5AF] bg-[#FBF8F3] px-2.5 py-1.5 font-mono"
-                      />
-                      <input
-                        type="text"
-                        value={editBranchForm.operatingHours}
-                        onChange={(e) =>
-                          setEditBranchForm({ ...editBranchForm, operatingHours: e.target.value })
-                        }
-                        placeholder="Jam Operasional"
-                        className="rounded border border-[#D4C5AF] bg-[#FBF8F3] px-2.5 py-1.5"
-                      />
-                      <div className="flex gap-2 sm:col-span-3">
-                        <button type="submit" className="rounded bg-[#3D4F35] px-3 py-1.5 font-semibold text-white">
-                          Simpan Cabang
+                    <form onSubmit={handleSaveBranchEdit} className="grid grid-cols-1 gap-3 rounded border border-[#D4C5AF] bg-[#FBF8F3] p-4 sm:grid-cols-6">
+                      <div className="sm:col-span-2">
+                        <label className="block text-[11px] font-semibold text-[#4A5045]">
+                          Kode Cabang *
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={editBranchForm.code}
+                          onChange={(e) => setEditBranchForm({ ...editBranchForm, code: e.target.value.toUpperCase() })}
+                          placeholder="JKT-SEL"
+                          className="mt-1 w-full rounded border border-[#D4C5AF] bg-white px-2.5 py-1.5 font-mono uppercase"
+                        />
+                      </div>
+                      <div className="sm:col-span-4">
+                        <label className="block text-[11px] font-semibold text-[#4A5045]">
+                          Nama Cabang *
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={editBranchForm.name}
+                          onChange={(e) => setEditBranchForm({ ...editBranchForm, name: e.target.value })}
+                          placeholder="Nama Cabang"
+                          className="mt-1 w-full rounded border border-[#D4C5AF] bg-white px-2.5 py-1.5"
+                        />
+                      </div>
+                      <div className="sm:col-span-6">
+                        <label className="block text-[11px] font-semibold text-[#4A5045]">
+                          Alamat Lengkap *
+                        </label>
+                        <textarea
+                          rows={2}
+                          required
+                          value={editBranchForm.address}
+                          onChange={(e) => setEditBranchForm({ ...editBranchForm, address: e.target.value })}
+                          placeholder="Alamat lengkap cabang..."
+                          className="mt-1 w-full rounded border border-[#D4C5AF] bg-white px-2.5 py-1.5"
+                        />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className="block text-[11px] font-semibold text-[#4A5045]">
+                          Telepon
+                        </label>
+                        <input
+                          type="text"
+                          value={editBranchForm.phone}
+                          onChange={(e) => setEditBranchForm({ ...editBranchForm, phone: e.target.value })}
+                          placeholder="021-xxxxxxx"
+                          className="mt-1 w-full rounded border border-[#D4C5AF] bg-white px-2.5 py-1.5 font-mono"
+                        />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className="block text-[11px] font-semibold text-[#4A5045]">
+                          WhatsApp
+                        </label>
+                        <input
+                          type="text"
+                          value={editBranchForm.whatsapp}
+                          onChange={(e) => setEditBranchForm({ ...editBranchForm, whatsapp: e.target.value })}
+                          placeholder="628xxxxxxxxxx"
+                          className="mt-1 w-full rounded border border-[#D4C5AF] bg-white px-2.5 py-1.5 font-mono"
+                        />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className="block text-[11px] font-semibold text-[#4A5045]">
+                          Jam Operasional
+                        </label>
+                        <input
+                          type="text"
+                          value={editBranchForm.operatingHours}
+                          onChange={(e) =>
+                            setEditBranchForm({ ...editBranchForm, operatingHours: e.target.value })
+                          }
+                          placeholder="Senin–Sabtu, 08:00–20:00 WIB"
+                          className="mt-1 w-full rounded border border-[#D4C5AF] bg-white px-2.5 py-1.5"
+                        />
+                      </div>
+                      <div className="flex flex-wrap gap-2 sm:col-span-6">
+                        <button
+                          type="submit"
+                          disabled={savingBranch}
+                          className="rounded bg-[#3D4F35] px-4 py-1.5 font-semibold text-white hover:bg-[#2F3E29] disabled:opacity-60"
+                        >
+                          {savingBranch ? 'Menyimpan...' : 'Simpan Cabang'}
                         </button>
                         <button
                           type="button"
                           onClick={() => setEditingBranchId(null)}
-                          className="rounded border border-[#D4C5AF] px-3 py-1.5"
+                          className="rounded border border-[#D4C5AF] bg-white px-3 py-1.5 font-medium"
                         >
                           Batal
                         </button>
@@ -932,74 +1089,120 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                           {br.operatingHours} · Telp {br.phone} · WA {br.whatsapp}
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => handleStartEditBranch(br)}
-                        className="rounded border border-[#D4C5AF] px-3 py-1.5 font-semibold text-[#1F241D] hover:bg-[#FBF8F3]"
-                      >
-                        Sunting Cabang
-                      </button>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleStartEditBranch(br)}
+                          className="inline-flex items-center gap-1 rounded border border-[#734F2C] bg-[#FBF8F3] px-3 py-1.5 font-semibold text-[#5C3D21] hover:bg-[#F5EFE6]"
+                        >
+                          <Pencil className="h-3 w-3" />
+                          Sunting Cabang
+                        </button>
+                        <button
+                          type="button"
+                          disabled={togglingBranchId === br.id}
+                          onClick={() => handleToggleBranchActive(br)}
+                          className={`rounded border px-3 py-1.5 font-semibold disabled:opacity-50 ${
+                            br.active
+                              ? 'border-[#3D4F35] bg-[#3D4F35] text-white'
+                              : 'border-[#D4C5AF] bg-white text-[#5E645A]'
+                          }`}
+                        >
+                          {br.active ? 'Aktif' : 'Nonaktif'}
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
               ))}
             </div>
 
-            <form onSubmit={handleCreateBranch} className="border-t border-[#EFE8DC] pt-4 space-y-2">
-              <div className="font-semibold text-[#2F3E29]">Tambah Cabang Baru</div>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-6">
-                <input
-                  type="text"
-                  required
-                  value={newBranchCode}
-                  onChange={(e) => setNewBranchCode(e.target.value)}
-                  placeholder="Kode (SBY)"
-                  className="rounded border border-[#D4C5AF] bg-[#FBF8F3] px-2.5 py-1.5 font-mono"
-                />
-                <input
-                  type="text"
-                  required
-                  value={newBranchName}
-                  onChange={(e) => setNewBranchName(e.target.value)}
-                  placeholder="Nama Cabang"
-                  className="rounded border border-[#D4C5AF] bg-[#FBF8F3] px-2.5 py-1.5 sm:col-span-2"
-                />
-                <input
-                  type="text"
-                  required
-                  value={newBranchAddress}
-                  onChange={(e) => setNewBranchAddress(e.target.value)}
-                  placeholder="Alamat Lengkap"
-                  className="rounded border border-[#D4C5AF] bg-[#FBF8F3] px-2.5 py-1.5 sm:col-span-3"
-                />
-                <input
-                  type="text"
-                  value={newBranchPhone}
-                  onChange={(e) => setNewBranchPhone(e.target.value)}
-                  placeholder="Telepon"
-                  className="rounded border border-[#D4C5AF] bg-[#FBF8F3] px-2.5 py-1.5 font-mono sm:col-span-2"
-                />
-                <input
-                  type="text"
-                  value={newBranchWa}
-                  onChange={(e) => setNewBranchWa(e.target.value)}
-                  placeholder="WhatsApp"
-                  className="rounded border border-[#D4C5AF] bg-[#FBF8F3] px-2.5 py-1.5 font-mono sm:col-span-2"
-                />
-                <input
-                  type="text"
-                  value={newBranchHours}
-                  onChange={(e) => setNewBranchHours(e.target.value)}
-                  placeholder="Jam Kerja"
-                  className="rounded border border-[#D4C5AF] bg-[#FBF8F3] px-2.5 py-1.5 sm:col-span-2"
-                />
+            <form onSubmit={handleCreateBranch} className="border-t border-[#EFE8DC] pt-4 space-y-3">
+              <div className="font-semibold text-[#2F3E29]">Tambah Cabang & Alamat Baru</div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-6">
+                <div className="sm:col-span-2">
+                  <label className="block text-[11px] font-semibold text-[#4A5045]">
+                    Kode Cabang *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={newBranchCode}
+                    onChange={(e) => setNewBranchCode(e.target.value.toUpperCase())}
+                    placeholder="Contoh: SBY-01"
+                    className="mt-1 w-full rounded border border-[#D4C5AF] bg-[#FBF8F3] px-2.5 py-1.5 font-mono uppercase"
+                  />
+                </div>
+                <div className="sm:col-span-4">
+                  <label className="block text-[11px] font-semibold text-[#4A5045]">
+                    Nama Cabang *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={newBranchName}
+                    onChange={(e) => setNewBranchName(e.target.value)}
+                    placeholder="Contoh: Cabang Darmo, Surabaya"
+                    className="mt-1 w-full rounded border border-[#D4C5AF] bg-[#FBF8F3] px-2.5 py-1.5"
+                  />
+                </div>
+                <div className="sm:col-span-6">
+                  <label className="block text-[11px] font-semibold text-[#4A5045]">
+                    Alamat Lengkap *
+                  </label>
+                  <textarea
+                    rows={2}
+                    required
+                    value={newBranchAddress}
+                    onChange={(e) => setNewBranchAddress(e.target.value)}
+                    placeholder="Jalan, nomor gedung, kelurahan, kecamatan, kota..."
+                    className="mt-1 w-full rounded border border-[#D4C5AF] bg-[#FBF8F3] px-2.5 py-1.5"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-[11px] font-semibold text-[#4A5045]">
+                    Telepon
+                  </label>
+                  <input
+                    type="text"
+                    value={newBranchPhone}
+                    onChange={(e) => setNewBranchPhone(e.target.value)}
+                    placeholder="031-xxxxxxx"
+                    className="mt-1 w-full rounded border border-[#D4C5AF] bg-[#FBF8F3] px-2.5 py-1.5 font-mono"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-[11px] font-semibold text-[#4A5045]">
+                    WhatsApp
+                  </label>
+                  <input
+                    type="text"
+                    value={newBranchWa}
+                    onChange={(e) => setNewBranchWa(e.target.value)}
+                    placeholder="628xxxxxxxxxx"
+                    className="mt-1 w-full rounded border border-[#D4C5AF] bg-[#FBF8F3] px-2.5 py-1.5 font-mono"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-[11px] font-semibold text-[#4A5045]">
+                    Jam Operasional
+                  </label>
+                  <input
+                    type="text"
+                    value={newBranchHours}
+                    onChange={(e) => setNewBranchHours(e.target.value)}
+                    placeholder="Senin–Sabtu, 08:00–20:00 WIB"
+                    className="mt-1 w-full rounded border border-[#D4C5AF] bg-[#FBF8F3] px-2.5 py-1.5"
+                  />
+                </div>
               </div>
               <button
                 type="submit"
-                className="inline-flex items-center gap-1 rounded border border-[#3D4F35] px-3 py-1.5 font-semibold text-[#3D4F35] hover:bg-[#3D4F35] hover:text-white"
+                disabled={creatingBranch}
+                className="inline-flex items-center gap-1 rounded bg-[#3D4F35] px-4 py-2 font-semibold text-white hover:bg-[#2F3E29] disabled:opacity-60"
               >
                 <Plus className="h-3.5 w-3.5" />
-                Tambah Cabang
+                {creatingBranch ? 'Menambahkan...' : 'Tambah Cabang'}
               </button>
             </form>
           </div>

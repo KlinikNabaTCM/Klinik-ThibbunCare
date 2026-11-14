@@ -229,7 +229,8 @@ function updateActiveCashSession(branchId: string, payment: PaymentRecord) {
     session.openingBalance + session.cashReceived - session.expenses - session.refunds;
 }
 
-let lastCloudSyncAt = 0;
+let cloudInitialized = false;
+let inFlightCloudLoad: Promise<ClinicDatabase | null> | null = null;
 
 export async function createApiApp(): Promise<express.Express> {
   const app = express();
@@ -237,14 +238,20 @@ export async function createApiApp(): Promise<express.Express> {
 
   // Sync Supabase cloud state (if configured) and auto-persist mutations before response completes
   app.use('/api', async (req, res, next) => {
-    if (supabaseAdmin && Date.now() - lastCloudSyncAt > 1500) {
-      const cloudDb = await loadCloudStateFromSupabase(supabaseAdmin);
+    if (supabaseAdmin) {
+      if (!inFlightCloudLoad) {
+        inFlightCloudLoad = loadCloudStateFromSupabase(supabaseAdmin).finally(() => {
+          inFlightCloudLoad = null;
+        });
+      }
+      const cloudDb = await inFlightCloudLoad;
       if (cloudDb) {
         db = cloudDb;
-      } else if (lastCloudSyncAt === 0) {
+        cloudInitialized = true;
+      } else if (!cloudInitialized) {
         await persistCloudStateToSupabase(db, supabaseAdmin);
+        cloudInitialized = true;
       }
-      lastCloudSyncAt = Date.now();
     }
 
     if (req.method !== 'GET' && req.method !== 'HEAD') {
@@ -254,7 +261,6 @@ export async function createApiApp(): Promise<express.Express> {
           persistDemoDatabase(db);
           if (supabaseAdmin) {
             void persistCloudStateToSupabase(db, supabaseAdmin).finally(() => {
-              lastCloudSyncAt = Date.now();
               origJson(body);
             });
             return res;
@@ -3394,7 +3400,41 @@ export async function createApiApp(): Promise<express.Express> {
     }
     if (branchUpdate && branchUpdate.id) {
       const idx = db.branches.findIndex((b) => b.id === branchUpdate.id);
-      if (idx >= 0) db.branches[idx] = { ...db.branches[idx], ...branchUpdate };
+      if (idx >= 0) {
+        const current = db.branches[idx];
+        const nextCode =
+          branchUpdate.code !== undefined && String(branchUpdate.code).trim()
+            ? String(branchUpdate.code).trim().toUpperCase()
+            : current.code;
+        if (db.branches.some((b) => b.id !== current.id && b.code.toUpperCase() === nextCode)) {
+          res.status(409).json({ error: 'DUPLICATE_BRANCH_CODE', message: `Kode cabang ${nextCode} sudah digunakan.` });
+          return;
+        }
+        const nextName =
+          branchUpdate.name !== undefined ? String(branchUpdate.name).trim() : current.name;
+        const nextAddress =
+          branchUpdate.address !== undefined ? String(branchUpdate.address).trim() : current.address;
+        if (!nextName || !nextAddress) {
+          res.status(400).json({ error: 'VALIDATION_ERROR', message: 'Nama cabang dan alamat lengkap tidak boleh kosong.' });
+          return;
+        }
+        db.branches[idx] = {
+          ...current,
+          code: nextCode,
+          name: nextName,
+          address: nextAddress,
+          phone: branchUpdate.phone !== undefined ? String(branchUpdate.phone).trim() || '-' : current.phone,
+          whatsapp:
+            branchUpdate.whatsapp !== undefined
+              ? String(branchUpdate.whatsapp).trim() || db.settings.primaryWhatsapp
+              : current.whatsapp,
+          operatingHours:
+            branchUpdate.operatingHours !== undefined && String(branchUpdate.operatingHours).trim()
+              ? String(branchUpdate.operatingHours).trim()
+              : current.operatingHours,
+          active: branchUpdate.active !== undefined ? Boolean(branchUpdate.active) : current.active,
+        };
+      }
     }
     if (serviceUpdate && serviceUpdate.id) {
       const idx = db.services.findIndex((s) => s.id === serviceUpdate.id);
@@ -3581,22 +3621,33 @@ export async function createApiApp(): Promise<express.Express> {
       return;
     }
     const { code, name, address, phone, whatsapp, operatingHours } = req.body ?? {};
-    if (!code || !name || !address) {
-      res.status(400).json({ error: 'VALIDATION_ERROR', message: 'Kode, nama cabang, dan alamat wajib diisi.' });
+    const normCode = String(code || '').trim().toUpperCase();
+    const normName = String(name || '').trim();
+    const normAddress = String(address || '').trim();
+    if (!normCode || !normName || !normAddress) {
+      res.status(400).json({ error: 'VALIDATION_ERROR', message: 'Kode, nama cabang, dan alamat lengkap wajib diisi.' });
+      return;
+    }
+    if (db.branches.some((b) => b.code.toUpperCase() === normCode)) {
+      res.status(409).json({ error: 'DUPLICATE_BRANCH_CODE', message: `Kode cabang ${normCode} sudah terdaftar.` });
       return;
     }
     const branch = {
       id: `br-${randomUUID().slice(0, 6)}`,
-      code: String(code).trim().toUpperCase(),
-      name: String(name).trim(),
-      address: String(address).trim(),
-      phone: String(phone || '-').trim(),
-      whatsapp: String(whatsapp || db.settings.primaryWhatsapp).trim(),
-      operatingHours: String(operatingHours || 'Senin–Sabtu, 08:00–20:00 WIB').trim(),
+      code: normCode,
+      name: normName,
+      address: normAddress,
+      phone: String(phone || '-').trim() || '-',
+      whatsapp: String(whatsapp || db.settings.primaryWhatsapp).trim() || db.settings.primaryWhatsapp,
+      operatingHours: String(operatingHours || 'Senin–Sabtu, 08:00–20:00 WIB').trim() || 'Senin–Sabtu, 08:00–20:00 WIB',
       active: true,
     };
     db.branches.push(branch);
-    user.branchIds = Array.from(new Set([...user.branchIds, branch.id]));
+    for (const u of db.users) {
+      if (u.id === user.id || u.roles.includes('admin')) {
+        u.branchIds = Array.from(new Set([...u.branchIds, branch.id]));
+      }
+    }
     appendAudit(db, user, {
       branchId: branch.id,
       action: 'TAMBAH_CABANG',
@@ -3801,10 +3852,36 @@ export async function createApiApp(): Promise<express.Express> {
       res.status(404).json({ error: 'NOT_FOUND', message: 'Cabang tidak ditemukan.' });
       return;
     }
-    const { active, name, address, phone, whatsapp, operatingHours } = req.body ?? {};
+    const { active, code, name, address, phone, whatsapp, operatingHours } = req.body ?? {};
+    if (code !== undefined) {
+      const nextCode = String(code).trim().toUpperCase();
+      if (!nextCode) {
+        res.status(400).json({ error: 'VALIDATION_ERROR', message: 'Kode cabang tidak boleh kosong.' });
+        return;
+      }
+      if (db.branches.some((b) => b.id !== branch.id && b.code.toUpperCase() === nextCode)) {
+        res.status(409).json({ error: 'DUPLICATE_BRANCH_CODE', message: `Kode cabang ${nextCode} sudah digunakan cabang lain.` });
+        return;
+      }
+      branch.code = nextCode;
+    }
+    if (name !== undefined) {
+      const nextName = String(name).trim();
+      if (!nextName) {
+        res.status(400).json({ error: 'VALIDATION_ERROR', message: 'Nama cabang tidak boleh kosong.' });
+        return;
+      }
+      branch.name = nextName;
+    }
+    if (address !== undefined) {
+      const nextAddress = String(address).trim();
+      if (!nextAddress) {
+        res.status(400).json({ error: 'VALIDATION_ERROR', message: 'Alamat lengkap cabang tidak boleh kosong.' });
+        return;
+      }
+      branch.address = nextAddress;
+    }
     if (active !== undefined) branch.active = Boolean(active);
-    if (name !== undefined && String(name).trim()) branch.name = String(name).trim();
-    if (address !== undefined && String(address).trim()) branch.address = String(address).trim();
     if (phone !== undefined) branch.phone = String(phone).trim() || '-';
     if (whatsapp !== undefined) branch.whatsapp = String(whatsapp).trim() || db.settings.primaryWhatsapp;
     if (operatingHours !== undefined && String(operatingHours).trim()) branch.operatingHours = String(operatingHours).trim();
@@ -3813,7 +3890,7 @@ export async function createApiApp(): Promise<express.Express> {
       action: 'PERBARUI_CABANG',
       objectType: 'Branch',
       objectId: branch.id,
-      detail: `Cabang ${branch.name} diperbarui (aktif: ${branch.active ? 'Ya' : 'Tidak'}).`,
+      detail: `Cabang ${branch.name} (${branch.code}) diperbarui (aktif: ${branch.active ? 'Ya' : 'Tidak'}).`,
     });
     res.json({ branch });
   });
