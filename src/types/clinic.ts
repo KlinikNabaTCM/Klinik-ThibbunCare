@@ -503,6 +503,9 @@ export interface FaqItem {
 export interface RuntimeStatus {
   mode: 'demo' | 'supabase';
   supabaseConfigured: boolean;
+  cloudPersistenceReady?: boolean;
+  vercelWithoutDatabase?: boolean;
+  cloudError?: string;
   whatsappProviderConfigured: boolean;
   paymentGatewayConfigured: boolean;
   timezone: 'Asia/Jakarta';

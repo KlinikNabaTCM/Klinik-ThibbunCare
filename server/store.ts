@@ -1327,39 +1327,52 @@ export function resetDemoDatabase(): ClinicDatabase {
 
 export async function loadCloudStateFromSupabase(
   supabaseAdmin: { from: (table: string) => any } | null
-): Promise<ClinicDatabase | null> {
-  if (!supabaseAdmin) return null;
+): Promise<{ db: ClinicDatabase | null; error?: string }> {
+  if (!supabaseAdmin) return { db: null };
   try {
     const { data, error } = await supabaseAdmin
       .from('thibbuncare_cloud_state')
       .select('data')
       .eq('id', 'primary')
       .maybeSingle();
-    if (error || !data?.data) return null;
+    if (error) {
+      return { db: null, error: error.message || 'Gagal membaca tabel thibbuncare_cloud_state di Supabase.' };
+    }
+    if (!data?.data) return { db: null };
     const parsed = data.data as ClinicDatabase;
     if (!parsed || !Array.isArray(parsed.patients) || !Array.isArray(parsed.services)) {
-      return null;
+      return { db: null };
     }
-    return migrateLoadedDatabase(parsed).db;
-  } catch {
-    return null;
+    return { db: migrateLoadedDatabase(parsed).db };
+  } catch (err) {
+    return {
+      db: null,
+      error: err instanceof Error ? err.message : 'Gagal terhubung ke Supabase.',
+    };
   }
 }
 
 export async function persistCloudStateToSupabase(
   db: ClinicDatabase,
   supabaseAdmin: { from: (table: string) => any } | null
-): Promise<void> {
-  if (!supabaseAdmin) return;
+): Promise<{ ok: boolean; error?: string }> {
+  if (!supabaseAdmin) return { ok: false, error: 'Supabase admin tidak dikonfigurasi.' };
   try {
-    await supabaseAdmin
+    const { error } = await supabaseAdmin
       .from('thibbuncare_cloud_state')
       .upsert(
         { id: 'primary', data: db, updated_at: new Date().toISOString() },
         { onConflict: 'id' }
       );
-  } catch {
-    // Gracefully skip if cloud state table is not yet created
+    if (error) {
+      return { ok: false, error: error.message || 'Gagal menyimpan ke tabel thibbuncare_cloud_state.' };
+    }
+    return { ok: true };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : 'Gagal menyimpan state ke Supabase.',
+    };
   }
 }
 

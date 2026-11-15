@@ -854,6 +854,19 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
       {errorMsg && <div className="rounded bg-[#FEF2F2] p-3 font-medium text-[#991B1B]">{errorMsg}</div>}
       {notice && <div className="rounded bg-[#F4F6F1] p-3 font-medium text-[#243020]">{notice}</div>}
 
+      {data && (data.runtime.vercelWithoutDatabase || data.runtime.cloudError) && (
+        <div className="rounded-lg border border-[#B45309]/40 bg-[#FFFBEB] p-4 text-[#78350F] space-y-1">
+          <div className="font-semibold">
+            Penyimpanan Permanen Cloud (Supabase) Belum Aktif
+          </div>
+          <p className="leading-relaxed">
+            {data.runtime.cloudError
+              ? `Koneksi Supabase mengembalikan kendala: ${data.runtime.cloudError}. Pastikan tabel public.thibbuncare_cloud_state sudah dibuat di SQL Editor Supabase.`
+              : 'Di Vercel, variabel SUPABASE_URL dan SUPABASE_SERVICE_ROLE_KEY belum terbaca di server sehingga data hanya tersimpan sementara dan akan kembali ke awal saat halaman di-refresh.'}
+          </p>
+        </div>
+      )}
+
       {data && (
         <>
           {/* Identitas Klinik */}

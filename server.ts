@@ -55,6 +55,10 @@ const signedAttachmentTokens = new Map<
   { attachmentId: string; visitId: string; expiresAt: number; issuedTo: string }
 >();
 
+const IS_VERCEL = process.env.VERCEL === '1' || Boolean(process.env.VERCEL_ENV);
+let cloudPersistenceReady = false;
+let lastCloudError: string | undefined;
+
 function getRuntimeStatus(): RuntimeStatus {
   const waConfigured = Boolean(
     process.env.WHATSAPP_PROVIDER_API_URL && !process.env.WHATSAPP_PROVIDER_API_URL.includes('MY_')
@@ -63,15 +67,26 @@ function getRuntimeStatus(): RuntimeStatus {
     process.env.PAYMENT_GATEWAY_WEBHOOK_SECRET &&
       !process.env.PAYMENT_GATEWAY_WEBHOOK_SECRET.includes('MY_')
   );
+  const vercelWithoutDatabase = IS_VERCEL && !supabaseCfg.configured;
+  let notice = 'Sistem operasional klinik ThibbunCare aktif (penyimpanan file lokal).';
+  if (supabaseCfg.configured) {
+    notice = lastCloudError
+      ? `Koneksi Supabase bermasalah: ${lastCloudError}`
+      : 'Terhubung ke database cloud Supabase.';
+  } else if (vercelWithoutDatabase) {
+    notice =
+      'Mode sementara di Vercel: SUPABASE_URL & SUPABASE_SERVICE_ROLE_KEY belum aktif di Vercel, sehingga perubahan akan kembali ke data awal saat refresh.';
+  }
   return {
     mode: supabaseCfg.configured ? 'supabase' : 'demo',
     supabaseConfigured: supabaseCfg.configured,
+    cloudPersistenceReady: supabaseCfg.configured ? cloudPersistenceReady && !lastCloudError : !IS_VERCEL,
+    vercelWithoutDatabase,
+    cloudError: lastCloudError,
     whatsappProviderConfigured: waConfigured,
     paymentGatewayConfigured: pgConfigured,
     timezone: 'Asia/Jakarta',
-    notice: supabaseCfg.configured
-      ? 'Terhubung ke database cloud Supabase.'
-      : 'Sistem operasional klinik ThibbunCare aktif.',
+    notice,
   };
 }
 
@@ -230,27 +245,41 @@ function updateActiveCashSession(branchId: string, payment: PaymentRecord) {
 }
 
 let cloudInitialized = false;
-let inFlightCloudLoad: Promise<ClinicDatabase | null> | null = null;
+let inFlightCloudLoad: Promise<{ db: ClinicDatabase | null; error?: string }> | null = null;
 
 export async function createApiApp(): Promise<express.Express> {
   const app = express();
   app.use(express.json({ limit: '4mb' }));
 
-  // Sync Supabase cloud state (if configured) and auto-persist mutations before response completes
+  // Disable HTTP caching on API endpoints and sync Supabase cloud state (if configured)
   app.use('/api', async (req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+
     if (supabaseAdmin) {
       if (!inFlightCloudLoad) {
         inFlightCloudLoad = loadCloudStateFromSupabase(supabaseAdmin).finally(() => {
           inFlightCloudLoad = null;
         });
       }
-      const cloudDb = await inFlightCloudLoad;
-      if (cloudDb) {
-        db = cloudDb;
+      const cloudRes = await inFlightCloudLoad;
+      if (cloudRes.error) {
+        lastCloudError = cloudRes.error;
+        cloudPersistenceReady = false;
+      } else if (cloudRes.db) {
+        db = cloudRes.db;
         cloudInitialized = true;
+        cloudPersistenceReady = true;
+        lastCloudError = undefined;
       } else if (!cloudInitialized) {
-        await persistCloudStateToSupabase(db, supabaseAdmin);
-        cloudInitialized = true;
+        const initRes = await persistCloudStateToSupabase(db, supabaseAdmin);
+        cloudInitialized = initRes.ok;
+        cloudPersistenceReady = initRes.ok;
+        lastCloudError = initRes.error;
+      } else {
+        cloudPersistenceReady = true;
+        lastCloudError = undefined;
       }
     }
 
@@ -260,7 +289,9 @@ export async function createApiApp(): Promise<express.Express> {
         if (res.statusCode < 400) {
           persistDemoDatabase(db);
           if (supabaseAdmin) {
-            void persistCloudStateToSupabase(db, supabaseAdmin).finally(() => {
+            void persistCloudStateToSupabase(db, supabaseAdmin).then((saveRes) => {
+              cloudPersistenceReady = saveRes.ok;
+              lastCloudError = saveRes.error;
               origJson(body);
             });
             return res;
